@@ -1,12 +1,14 @@
 # Moonshadow
 
+**[中文](README.md) | [English](README.en.md)**
+
 本地优先、可回溯的 Agent 时间分层记忆系统。**原文冷存，短卡分层，时间定衰减，按需召回，精确时回取原文。**
 
 | | |
 |---|---|
 | **仓库** | <https://github.com/sins-gif/moonshadow> |
 | **版本** | `v1.2.0`（[该版本的代码](https://github.com/sins-gif/moonshadow/tree/v1.2.0) ｜ `git tag v1.2.0`） |
-| **最小复跑** | `python -m unittest discover -s tests` → `Ran 196 tests` + `OK` |
+| **最小复跑** | `python -m unittest discover -s tests` → `Ran 198 tests` + `OK` |
 
 > **本版是数据驱动的参数收敛版**：`f = 0.5925`、`θ = θ′ = 0.3941`、默认方案乘性；
 > `T9` 走负例覆盖（该缺口记录在案）。封版读数：**13 个工具全部退出码 `0`**。
@@ -23,8 +25,8 @@
 - **纯 Python 标准库实现，零第三方依赖**（Python 3.10+）——`import` 里没有 numpy，也没有任何数据库驱动之外的东西。
 - **采用有界乘性修正算法**（`q = r · m`，`m ∈ [f, 1]`），规避加性融合的**阈值不可分离**缺陷：
   同一批用例上，加性方案在合成网格里于乘性方案**有保证**的区域仍反转 `117` 组，乘性越界 `0` 组；
-  其排序一致率反而更高（`1.000` vs `1.000`），**排序指标看不出的缺陷，由阈值与漂移实验暴露**。
-- **196 项单元测试 + 13 条审计/验证命令**：参数与数据严格受控——用例的卡龄窗口与门前置、
+  其排序一致率**也并列满分**（`1.000` vs `1.000`）——**排序指标看不出的缺陷，由阈值与漂移实验暴露**。
+- **198 项单元测试 + 13 条审计/验证命令**：参数与数据严格受控——用例的卡龄窗口与门前置、
   负例是否真被门挡住、留出集是否被改动、文档里的赋值式是否与代码一致，**全部可执行、可复跑**。
 
 ## 项目现状（v1.2）
@@ -46,7 +48,7 @@
 无需安装任何依赖（Python 3.10+，纯标准库）：
 
 ```bash
-python -m unittest discover -s tests   # 确定性测试：条数与状态以本命令输出为准（本次交付实测 Ran 196 tests + OK）
+python -m unittest discover -s tests   # 确定性测试：条数与状态以本命令输出为准（本次交付实测 Ran 198 tests + OK）
 
 # 审计与契约（四条，均应为 0 违规）
 python tools/run_case_audit.py          # 用例的卡龄窗口与 T8/T9 门前置
@@ -223,6 +225,7 @@ python examples/demo.py                 # 端到端演示，打印每一步的�
 ```text
 moonshadow/
 ├── README.md            门面：特点、现状、已知缺陷、快速开始、作者说明
+├── README.en.md         English version of the same document（英文版，内容一一对应）
 ├── LICENSE              MIT
 ├── .gitignore           忽略 __pycache__ / .env / 凭据 / 大文件与归档 / 运行产物
 ├── .gitattributes       `* -text`：禁止换行转换（否则留出集冻结哈希会在 checkout 后全部失效）
@@ -232,7 +235,7 @@ moonshadow/
 ├── src/moonshadow/      17 个文件 / 16 个模块（纯标准库）
 ├── tools/               13 个可执行命令（审计 + 评测 + 重划 + 守卫）
 ├── eval/                用例集：gold 3 + rank 26 + holdout 9（冻结）+ network 48 + 冻结清单
-├── tests/               14 个测试文件 / 196 项断言
+├── tests/               14 个测试文件 / 198 项断言
 ├── examples/demo.py     端到端演示
 └── experiments/         用户自算记录（原样保存，不得修改；见文件内说明）
 ```
@@ -285,7 +288,7 @@ src/moonshadow/
   network_eval.py       network 赋值评测：混淆矩阵 + 严格/可达双口径
   network_rules.py      四类网络的类级词汇规则（不依赖 tier）
   drift.py              参数漂移下的反转区域测量（加性方案无比值上界的实证）
-tests/                  Phase 1 / 2 / 2.5 / 3 的验收测试（14 个测试文件；`Ran 196 tests` + `OK`，以命令输出为准）
+tests/                  Phase 1 / 2 / 2.5 / 3 的验收测试（14 个测试文件；`Ran 198 tests` + `OK`，以命令输出为准）
 experiments/            用户自算记录（原样保存，不得修改；见文件内说明）
 examples/demo.py        端到端演示
 ```

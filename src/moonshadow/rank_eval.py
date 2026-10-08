@@ -60,8 +60,8 @@ HOLDOUT_DIR = ROOT / "eval" / "holdout"
 NOW = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
 
 SCHEME_LABELS: dict[str, str] = {
-    SCHEME_ADDITIVE: "加性（现行 0.45/0.25/0.20/0.10）",
-    SCHEME_MULTIPLICATIVE: "乘性修正（相关性 × [0.7, 1.0]）",
+    SCHEME_ADDITIVE: "加性（v1.0 的 0.45/0.25/0.20/0.10；未采纳）",
+    SCHEME_MULTIPLICATIVE: f"乘性修正（相关性 × [{TIME_FLOOR}, 1.0]）",
     SCHEME_RELEVANCE: "仅相关性 + 时间破同分",
     SCHEME_INTENT_AWARE: "乘性 + 按意图硬切换下限",
     SCHEME_BLENDED: "乘性 + 连续敏感度插值",

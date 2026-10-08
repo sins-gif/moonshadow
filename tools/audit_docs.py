@@ -36,6 +36,11 @@ from moonshadow.scoring import ADOPTED_SCHEME, THETA, THETA_HIGH, TIME_FLOOR  # 
 DOCS = ROOT / "docs"
 INDEX = DOCS / "README.md"
 ROOT_README = ROOT / "README.md"
+#: 根目录的英文门面。**必须与中文版一样受检**——英文世界只看得到它，
+#: 而「英文版里的数字悄悄过期」比中文版更不易被发现。
+ROOT_README_EN = ROOT / "README.en.md"
+#: 根目录下所有受检文档（含英文版；新增根目录文档必须登记进来）。
+ROOT_DOCS = (ROOT_README, ROOT_README_EN)
 
 #: 唯一权威文档。
 SPEC = DOCS / "v1.2-spec.md"
@@ -56,9 +61,17 @@ LIVING = ("README.md", "backlog.md")
 #: 历史文档必须带的状态标注。
 HISTORICAL_MARKERS = ("历史版本", "不作为当前依据")
 
-#: 现行文档引用历史文档时，同一行必须出现的语义标记——
-#: 防止把历史数字当依据读（只写版本号不算，那太容易误过）。
-CITATION_MARKERS = ("历史", "思考过程", "已归档", "取代", "当时", "失效", "被否", "旧")
+#: 现行文档引用历史文档时，附近必须出现的语义标记——防止把历史数字当依据读。
+#: 中英双语：仓库同时有中文文档与英文 README，只列中文会把英文文档误判为违规。
+CITATION_MARKERS = (
+    "历史", "思考过程", "已归档", "取代", "当时", "失效", "被否", "旧",
+    "historical", "history", "archived", "superseded", "withdrawn", "retired", "obsolete",
+)
+
+#: 拉丁字母标记统一折叠大小写后再比对。实测漏过：英文 README 写
+#: `**Historical versions ...**`（首字母大写、句首），大小写敏感比对判它没有标记，
+#: 与「标记是双语的」这一意图相反。中文不受 `lower()` 影响，故整套标记一起折叠即可。
+_CITATION_MARKERS_FOLDED = tuple(marker.lower() for marker in CITATION_MARKERS)
 
 #: 现行文档（除 spec 本身）：每份都必须声明与 spec 的关系。
 CURRENT = (
@@ -69,6 +82,7 @@ CURRENT = (
     INDEX,
     DOCS / "backlog.md",
     ROOT_README,
+    ROOT_README_EN,
 )
 
 #: 赋值式：`IDENT = <number>`。只认这一种形式——「提及标识符」不算声称取值，
@@ -88,8 +102,14 @@ VALUES = {"TIME_FLOOR": TIME_FLOOR, "THETA_HIGH": THETA_HIGH, "THETA": THETA}
 
 
 def markdown_files() -> list[pathlib.Path]:
+    """受检文件全集：`docs/` 下全部 + 根目录登记在 `ROOT_DOCS` 里的门面文档。
+
+    根目录文档必须走 `ROOT_DOCS` 而不是写死单个名字：写死时新增英文版等于
+    **不进任何内容检查**（链接、赋值式、历史引用全不查），而守卫照样打印通过——
+    「被检」和「看起来被检」的区别就在这里。
+    """
     return sorted(
-        list(DOCS.rglob("*.md")) + ([ROOT_README] if ROOT_README.exists() else [])
+        list(DOCS.rglob("*.md")) + [path for path in ROOT_DOCS if path.exists()]
     )
 
 
@@ -192,7 +212,7 @@ def check_citations_of_history() -> list[str]:
             if not _HISTORICAL_NAME.search(line):
                 continue
             nearby = "\n".join(lines[max(0, index - window) : index + window + 1])
-            if any(marker in nearby for marker in CITATION_MARKERS):
+            if any(marker in nearby.lower() for marker in _CITATION_MARKERS_FOLDED):
                 continue
             violations.append(
                 f"{path.relative_to(ROOT)}:{index + 1}：引用了历史文档但附近未标注其历史地位"
