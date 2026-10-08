@@ -13,6 +13,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from moonshadow.verify import (  # noqa: E402
+    CARD_TEXT_FIELDS,
     QUALITATIVE_KEYWORDS,
     SENTENCE_SPLIT_RE,
     Report,
@@ -168,6 +169,50 @@ class QualitativeRetentionTest(unittest.TestCase):
             "constraint 词表必须与 compress 的 T0 判定词一致",
         )
         self.assertEqual(SENTENCE_SPLIT_RE.pattern, COMPRESS_SPLIT.pattern)
+
+
+class RawQuoteAndBacklinkTest(unittest.TestCase):
+    """Q3：`raw_quote` 移出卡文本，`T0/T1` 的逐字可用性改由 `source_ids` 回链保证。
+
+    这组测试钉住两件事：**卡文本不再计 `raw_quote`**（否则逐字复制等于有许可证），
+    以及**回链的边界**（它只覆盖「卡引用到的原文」，追不回没被引用的消息）。
+    """
+
+    RAW = "预算 12 万，截止 2026-10-15。"
+
+    def test_card_text_fields_exclude_raw_quote(self) -> None:
+        self.assertNotIn("raw_quote", CARD_TEXT_FIELDS)
+
+    def test_card_text_ignores_raw_quote_content(self) -> None:
+        """卡上仍带 `raw_quote`（旧卡与规则基线）时，它既不计入卡文本、也不进压缩率。"""
+        text = card_text(
+            {"summary": "预算 12 万。", "raw_quote": "原文整段：预算 12 万，截止 2026-10-15。"}
+        )
+        self.assertIn("12 万", text)
+        self.assertNotIn("2026-10-15", text)
+
+    def test_hard_field_is_reachable_through_the_source_link(self) -> None:
+        report = verify_no_silent_loss(
+            self.RAW,
+            [card(summary="细节见原文。", source_ids=["m1"])],
+            sources={"m1": self.RAW},
+        )
+        self.assertTrue(report.ok, report.summary())
+
+    def test_backlink_does_not_rescue_a_dropped_message(self) -> None:
+        """回链只覆盖「卡引用到的原文」：没有卡引用它，字段就真的追不回来。"""
+        report = verify_no_silent_loss(
+            self.RAW,
+            [card(summary="另一件事。", source_ids=["m2"])],
+            sources={"m1": self.RAW, "m2": "另一件事。"},
+        )
+        self.assertFalse(report.ok)
+        self.assertEqual(report.missing["amount"], ["12 万"])
+
+    def test_without_sources_the_check_stays_card_only(self) -> None:
+        """不传 `sources` 时退回旧行为——回链必须由调用方显式打开。"""
+        report = verify_no_silent_loss(self.RAW, [card(summary="细节见原文。")])
+        self.assertFalse(report.ok)
 
 
 if __name__ == "__main__":

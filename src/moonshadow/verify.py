@@ -57,9 +57,13 @@ SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？!?\n])")
 #: 当作「决策有载体」是空头支票：T8/T9 的内容按定义就是要丢掉的。
 CARRY_FORBIDDEN_TIERS: tuple[str, ...] = ("T8", "T9")
 
+#: 参与「卡内文本」比对的字段。**`raw_quote` 不在其中**（v1.3 决定 Q3）：
+#: 卡把原文整段抄一遍不是压缩，把它计入卡文本就等于给逐字复制发许可证——
+#: 去掉它之后压缩率才是对「抽取器有没有真的抽象」的度量。
+#: 原文的逐字可用性由 **store 的原文与 `source_ids` 回链**保证，不再由卡自己保证；
+#: 硬字段在卡内查不到时会走回链（见 `verify_no_silent_loss`）。
 CARD_TEXT_FIELDS = (
     "summary",
-    "raw_quote",
     "facts",
     "decisions",
     "todos",
@@ -113,7 +117,11 @@ def extract_key_fields(text: str) -> dict[str, list[str]]:
 
 
 def card_text(card: Mapping[str, Any]) -> str:
-    """把一张卡里所有「可承载字面值」的字段拼成一段文本用于比对。"""
+    """把一张卡里所有「可承载字面值」的字段拼成一段文本用于比对。
+
+    **不含 `raw_quote`**：卡把原文整段抄一遍不是压缩（见 `CARD_TEXT_FIELDS` 的说明）。
+    卡上若仍带着该字段，它既不计入卡文本、也不参与压缩率。
+    """
     chunks: list[str] = []
     for name in CARD_TEXT_FIELDS:
         value = card.get(name)
@@ -131,12 +139,41 @@ def verify_no_silent_loss(
     cards: Sequence[Mapping[str, Any]],
     *,
     soft: bool = True,
+    sources: Mapping[str, str] | None = None,
 ) -> Report:
-    """校验一段原文里的关键字段，是否至少被一张卡保留下来。"""
+    """校验一段原文里的关键字段，是否至少被一张卡**保住或追得回来**。
+
+    两级判据（v1.3 决定 Q3 之后）：
+
+    1. **卡内文本**：字段出现在某张卡的 `summary`/`facts`/… 里 —— 第一判据。
+    2. **回链可达**：卡内查不到时，看它是否出现在「这些卡所引用的原文块」里
+       （`sources` 传 `source_id → 原文` 的映射；不传则退回只有第一判据的旧行为）。
+
+    为什么要有第二级：`raw_quote` 已移出卡文本，`T0/T1` 的逐字可用性改由 store 的原文
+    与 `source_ids` 回链保证。**这同时改变了这条判据的性质**：
+
+    - 它拦得住「消息连同 `source_id` 一起消失」——回链断了，字段再也追不回来；
+    - 它拦**不住**「卡引用了消息、但没把字段写进去」——回链把那种形状判为通过。
+
+    这是有意的取舍，边界写在 `docs/v1.2-spec.md` §9.1。要让这条判据重新对「卡里没写」
+    有分辨力，不能靠改这里，只能改原文保留策略（原文过期后回链自然失效）。
+    金标准集的 `expected_key_fields` 仍然是**卡内文本**判据（见 `eval.run_case`），
+    所以「引用了却没写」在那一侧仍会被判失败——两条判据合起来才是完整的关卡。
+    """
     report = Report()
     haystack = normalize(card_text_many(cards))
+    linked = ""
+    if sources is not None and cards:
+        reachable = {
+            str(source_id) for card in cards for source_id in card.get("source_ids", ())
+        }
+        linked = normalize("".join(str(sources[sid]) for sid in reachable if sid in sources))
     for name, values in extract_key_fields(raw_text).items():
-        lost = [value for value in values if normalize(value) not in haystack]
+        lost = [
+            value
+            for value in values
+            if normalize(value) not in haystack and normalize(value) not in linked
+        ]
         if lost:
             report.missing[name] = lost
 

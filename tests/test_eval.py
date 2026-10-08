@@ -123,13 +123,29 @@ class EvalGateTest(unittest.TestCase):
         self.assertIn("PASS", report.summary())
 
     def test_lossy_extractor_fails_the_gate(self) -> None:
+        """故意不可用的抽取器必须被判失败。
+
+        Q3 之后它**失败的位置变了**：全局硬字段扫描改走 `source_id` 回链（卡引用了消息
+        就算追得回），所以拦住它的是**金标准集的 `expected_key_fields`**（卡内文本判据）
+        与定性内容判据，而不是 `lost`。这条测试跟着改，是为了不让它假装还在测原来那件事。
+        """
         report = run_eval(extractor=LossyExtractor())
         self.assertFalse(report.ok)
-        self.assertLess(report.key_field_recall, 1.0)
         self.assertIn("FAIL", report.summary())
         failed = [r for r in report.results if not r.ok]
         self.assertTrue(failed)
-        self.assertTrue(any(r.lost for r in failed), "必须指明丢了哪些字段")
+        self.assertTrue(any(r.missing_expected for r in failed), "必须指明缺了哪些期望字段")
+
+    def test_global_sweep_is_now_backlink_based(self) -> None:
+        """**边界**（Q3 的代价，实测钉住）：卡引用了消息却没写字段时，全局扫描判通过。
+
+        `key_field_recall` 因此恒为 `1.0`（只要原文还在 store 里）。这不是 bug，
+        是「原文可用性由 store 保证、不再由卡保证」的直接后果；要恢复这条扫描的分辨力，
+        只能改原文保留策略（原文过期后回链自然失效），不能靠改判据。
+        """
+        report = run_eval(extractor=LossyExtractor())
+        self.assertEqual(report.key_field_recall, 1.0)
+        self.assertTrue(all(not r.lost for r in report.results))
 
     def test_missing_expected_field_is_reported(self) -> None:
         case = GoldCase(

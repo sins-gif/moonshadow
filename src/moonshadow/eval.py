@@ -27,29 +27,32 @@
 **适用域（v1.3 Phase 0）**：压缩率是输入规模的函数。原文本身只有「一句话 + 一个日期」时，
 任何正确系统都做不出 > 1x——没有可抽象的冗余，而精度关卡又要求逐字保留日期与金额。
 旧金标准集 3 条、每条 28–45 token 正落在这个退化区间，因此本版把金标准集扩成 **25 条**
-（其中 22 条长会话，原文 `527–1,927` token，合计 `25,608` token，含跨消息冗余与多类关键字段）。
+（其中 22 条长会话，原文 `527–1,927` token，合计 `25,630` token，含跨消息冗余与多类关键字段）。
 
-同一份金标准集上三条参照线（**一次性探针，仓库里没有对应命令**；逐用例平均 / token 加权）：
+同一份金标准集上的两条参照线（**一次性探针，仓库里没有对应命令**；逐用例平均 / token 加权）：
 
 | 参照线 | 逐用例平均 | token 加权 | 卡数 |
 |---|---|---|---|
-| 基线 | `0.437x` | `0.443x` | `474` |
-| 去掉 `raw_quote` | `0.493x` | `0.487x` | `474` |
-| 只留 `summary` | `1.007x` | `1.020x` | `474` |
+| 基线 | `0.498x` | `0.487x` | `474` |
+| 只留 `summary` | `1.022x` | `1.026x` | `474` |
 
-三者卡数相同（一条消息一张卡），所以这两件事是分开的：**丢掉规范要求的逐字原文只买到约
-`0.06`，其余 `0.57` 全部来自逐句复述字段**；而**只把每张卡写短也不够**——要真正超过 `1`
+两条参照线卡数相同（一条消息一张卡）——**卡数不变、被去掉的只是「逐句复述字段」**，
+差额 `0.54` 就是那一部分。所以**只把每张卡写短也不够**：要真正超过 `1`
 必须减少卡数（把跨消息冗余归并成更少的卡）。
 
-**一处作废的旧数**：此前文档写「把逐句字段全部去掉只留 summary，压缩率恰好回到 `1.0000x`」。
-那个数来自一次**旁路快路径与批处理**的脚本，与流水线口径不同。本流水线上同一变体在旧 3 条上读
-`0.9123x` / `0.9130x`（仍 < 1：快路径给 `T8/T9` 卡补了 `raw_quote`，且 1:1 的 summary 对短消息
-没有压缩空间），在新 25 条上读 `1.007x` / `1.020x`。旧数作废，按新口径引用。
+（v1.2 时这里还有第三条「去掉 `raw_quote`」的参照线。v1.3 决定 Q3 之后它**不再是变量**：
+`raw_quote` 已移出 `CARD_TEXT_FIELDS`，把它置空与基线**实测完全同值**
+（`0.4976x` / `0.4868x`）——这正说明口径变更生效了。）
 
-**基线为什么必然膨胀**：SPEC 要求 T0/T1 保留原文，于是 `BaselineExtractor` 把整段原文
-抄进 `raw_quote`，`facts` 又把同一批关键字段复述一遍，`decisions`/`todos`/`constraints`
-再把整句抄第二遍。这是**符合规范的基线代价**，不是 bug：它标出了「不丢字段」的召回上限，
-模型抽取器的任务是在保持该保留率的前提下把压缩率做上去。
+**一处口径相关的旧数**：文档里曾写「只留 summary 恰好回到 `1.0000x`」，也曾写
+「本流水线上同一变体读 `0.9123x`」。两个数各自在一套口径下成立：`1.0000x` 是**不计
+`raw_quote`** 时的读数（Q3 之后本流水线在旧 3 条上实测正是 `1.0000x`），`0.9123x` 是
+**计 `raw_quote`** 时的读数（快路径给 `T8/T9` 卡补了它）。引用时必须带上口径。
+
+**基线为什么膨胀**：`facts` 把关键字段复述一遍，`decisions`/`todos`/`constraints`
+再把整句抄第二遍，而基线是「一条消息一张卡」，同一批字段按消息数重复 N 次。
+（`T0/T1` 卡上的 `raw_quote` 已不计入卡文本——见上。这是**符合规范的基线代价**，不是 bug：
+它标出了「不丢字段」的召回上限，模型抽取器的任务是在保持该保留率的前提下把压缩率做上去。）
 """
 
 from __future__ import annotations
@@ -353,12 +356,15 @@ def run_case(
 
         cards = store.cards(session_id=session)
         raw_text = "\n".join(case.messages)
-        report = verify_no_silent_loss(raw_text, cards)
-        # 定性内容判据：硬字段保住 ≠ 内容保住（决策/约束/否定一个硬字段都没有）。
+        # 回链侧：`source_id → 原文`。v1.3 决定 Q3 之后，`raw_quote` 不再进卡文本，
+        # 硬字段在卡内查不到时按这些原文块兜底（见 `verify.verify_no_silent_loss`）。
         raw_messages = [
             {"id": row["id"], "text": store.get_raw(str(row["id"]))}
             for row in store.messages_for_session(session)
         ]
+        sources = {str(row["id"]): str(row["text"]) for row in raw_messages}
+        report = verify_no_silent_loss(raw_text, cards, sources=sources)
+        # 定性内容判据：硬字段保住 ≠ 内容保住（决策/约束/否定一个硬字段都没有）。
         qualitative = verify_qualitative_retention(raw_messages, cards)
 
         extracted = extract_key_fields(raw_text)
@@ -366,6 +372,8 @@ def run_case(
         lost_count = sum(len(values) for values in report.missing.values())
         recall = (total_fields - lost_count) / total_fields if total_fields else 1.0
 
+        # 金标准集的期望字段走**卡内文本**：这条不走回链，所以「引用了却没写进去」
+        # 在这里仍会被判失败——回链放宽的是全局扫描，不是金标准的期望。
         produced = normalize(card_text_many(cards))
         missing_expected = [
             value for value in case.expected_key_fields if normalize(value) not in produced
