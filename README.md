@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **仓库** | <https://github.com/sins-gif/moonshadow> |
-| **版本** | `v1.2.0`（[发布标签](https://github.com/sins-gif/moonshadow/releases/tag/v1.2.0) ｜ [该版本的代码](https://github.com/sins-gif/moonshadow/tree/v1.2.0)） |
+| **版本** | `v1.2.0`（[该版本的代码](https://github.com/sins-gif/moonshadow/tree/v1.2.0) ｜ `git tag v1.2.0`） |
 | **最小复跑** | `python -m unittest discover -s tests` → `Ran 196 tests` + `OK` |
 
 > **本版是数据驱动的参数收敛版**：`f = 0.5925`、`θ = θ′ = 0.3941`、默认方案乘性；
