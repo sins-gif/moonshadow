@@ -217,29 +217,27 @@ class WorktreeHygieneTest(unittest.TestCase):
     - 冻结的留出集按 **SHA-256** 校验（`eval/split-manifest.json`），
       换行符一变哈希立刻不符，`run_split_integrity.py` 会报「留出用例已被修改」——
       而真正的改动可能只是编辑器/脚本换了行尾。
-    - `README.md` 是唯一按 CRLF 提交的文件（历史如此），所以它豁免。
+
+    约定：**全仓库一律 LF**。`README.md` 曾经是唯一按 CRLF 提交的文件（历史如此），
+    本批统一为 LF，因此这里不再有豁免。
     """
 
-    #: 唯一允许 CRLF 的文件（它在 HEAD 里本来就是 CRLF）。
-    CRLF_ALLOWED = ("README.md",)
-
-    #: 不扫的目录：这些是产物而不是源文件（`.pyc` 里当然有 `\r\n` 字节）。
+    #: 不扫的目录：这些是产物或外部目录，不是受控源文件（`.pyc` 里当然有 `\\r\\n` 字节）。
     SKIP_DIRS = ("__pycache__", ".git", ".venv", "node_modules", "build", "dist", ".tmp")
 
-    def test_no_unexpected_carriage_returns(self) -> None:
+    def test_whole_tree_is_lf(self) -> None:
         offenders = []
-        for directory in ("docs", "src", "tools", "tests", "eval", "examples", "experiments"):
-            for path in sorted((ROOT / directory).rglob("*")):
-                if not path.is_file() or path.name in self.CRLF_ALLOWED:
-                    continue
-                parts = path.relative_to(ROOT).parts
-                if any(part in self.SKIP_DIRS for part in parts):
-                    continue
-                if b"\r\n" in path.read_bytes():
-                    offenders.append(str(path.relative_to(ROOT)).replace("\\", "/"))
+        for path in sorted(ROOT.rglob("*")):
+            if not path.is_file():
+                continue
+            parts = path.relative_to(ROOT).parts
+            if any(part in self.SKIP_DIRS for part in parts):
+                continue
+            if b"\r\n" in path.read_bytes():
+                offenders.append(str(path.relative_to(ROOT)).replace("\\", "/"))
         self.assertEqual(
             offenders, [],
-            "以下文件被转成了 CRLF（会破坏冻结哈希与 diff）；"
+            "以下文件不是 LF（会破坏冻结哈希与 diff）；"
             "改文件请用 read_bytes/write_bytes，不要用 write_text",
         )
 
