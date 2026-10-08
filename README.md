@@ -2,9 +2,14 @@
 
 本地优先、可回溯的 Agent 时间分层记忆系统。**原文冷存，短卡分层，时间定衰减，按需召回，精确时回取原文。**
 
-> **当前版本：`v1.2.0`（已封版，见 `git tag v1.2.0`）**——数据驱动的参数收敛版：
-> `f = 0.5925`、`θ = θ′ = 0.3941`、默认方案乘性；`T9` 走负例覆盖（该缺口记录在案）。
-> 封版读数：13 个工具全部退出码 `0`，`python -m unittest discover -s tests` → `Ran 196 tests` + `OK`。
+| | |
+|---|---|
+| **仓库** | <https://github.com/sins-gif/moonshadow> |
+| **版本** | `v1.2.0`（[发布标签](https://github.com/sins-gif/moonshadow/releases/tag/v1.2.0) ｜ [该版本的代码](https://github.com/sins-gif/moonshadow/tree/v1.2.0)） |
+| **最小复跑** | `python -m unittest discover -s tests` → `Ran 196 tests` + `OK` |
+
+> **本版是数据驱动的参数收敛版**：`f = 0.5925`、`θ = θ′ = 0.3941`、默认方案乘性；
+> `T9` 走负例覆盖（该缺口记录在案）。封版读数：**13 个工具全部退出码 `0`**。
 
 - 现行协议（**动手前先读这份**）：**`docs/v1.2-spec.md`** ← 定义、契约与**定值参数**
 - **文档索引 / 从哪读起**：`docs/README.md` ← 权威分工、阅读顺序、维护规则
