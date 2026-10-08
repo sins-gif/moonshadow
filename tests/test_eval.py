@@ -12,7 +12,12 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from moonshadow.compress import SENTENCE_SPLIT_RE, BaselineExtractor  # noqa: E402
+from moonshadow.compress import (  # noqa: E402
+    SENTENCE_SPLIT_RE,
+    TIER_IMPORTANCE,
+    BaselineExtractor,
+    classify_tier,
+)
 from moonshadow.eval import (  # noqa: E402
     DEFAULT_MIN_RECALL,
     GoldCase,
@@ -37,6 +42,59 @@ class LossyExtractor:
                 "importance": 2,
                 "network": "observation",
                 "summary": "已省略细节。",
+                "source_ids": [str(message["id"])],
+            }
+
+
+class DropQualitativeExtractor:
+    """只给含硬字段的消息出卡；纯定性内容的消息（决策/约束/否定）**一张卡都不出**。
+
+    这是定性内容判据要拦的形状：消息连同它的 `source_id` 一起消失，追溯链断了。
+    """
+
+    name = "drop-qualitative"
+
+    def __call__(self, messages):  # type: ignore[no-untyped-def]
+        for message in messages:
+            text = str(message.get("text", ""))
+            if not extract_key_fields(text):
+                continue  # 没有硬字段 → 整条丢掉（含决策、条件、否定）
+            tier = classify_tier(text)
+            yield {
+                "tier": tier,
+                "importance": TIER_IMPORTANCE[tier],
+                "network": "experience",
+                "summary": text[:120],
+                "facts": [text[:120]],
+                "source_ids": [str(message["id"])],
+            }
+
+
+class StubCardExtractor:
+    """每条消息都出一条「只在硬字段上有内容」的卡：引用了 source_id，但没有承载定性内容。
+
+    用它把定性判据的**边界**钉住：这条判据是**可追溯性**判据（有没有卡引用），
+    不是语义判据（卡里有没有那句话）。上面的形状它拦得住，这个形状它拦不住——
+    要拦这一种得靠模型模糊校验（第二级），硬关卡不假装能判语义。
+    """
+
+    name = "stub-card"
+
+    def __call__(self, messages):  # type: ignore[no-untyped-def]
+        for message in messages:
+            text = str(message.get("text", ""))
+            tier = classify_tier(text)
+            kept = [
+                sentence.strip()
+                for sentence in SENTENCE_SPLIT_RE.split(text)
+                if sentence.strip() and extract_key_fields(sentence)
+            ]
+            yield {
+                "tier": tier,
+                "importance": TIER_IMPORTANCE[tier],
+                "network": "experience",
+                "summary": "（摘要未写）",
+                "facts": kept,
                 "source_ids": [str(message["id"])],
             }
 
@@ -99,6 +157,31 @@ class EvalGateTest(unittest.TestCase):
         self.assertTrue(report.ok)
         self.assertLess(report.compression_ratio, 1.0)
         self.assertIn("膨胀", report.summary())
+
+    def test_dropped_qualitative_message_is_caught(self) -> None:
+        """把纯定性内容的消息整条丢掉的抽取器**必须失败**。
+
+        这是定性内容判据的存在理由：这个形状的硬字段保留率是 `1.0000`，
+        在加这条判据之前它能拿到 ``ok=True``。
+        """
+        report = run_eval(extractor=DropQualitativeExtractor())
+        self.assertFalse(report.ok, "丢掉纯定性消息的抽取器必须被拦住")
+        caught = [r for r in report.results if r.uncarried]
+        self.assertTrue(caught, "必须报告哪些原文的定性内容没有载体")
+        self.assertIn("定性内容无载体", caught[0].summary())
+
+    def test_stub_card_passes_this_gate_by_design(self) -> None:
+        """**边界**：出了卡、引用了 source_id 但没有承载定性内容的形状，这条判据拦不住。
+
+        判据是可追溯性判据：它要求「有卡能追溯到这条原文」，不要求「卡里有那句话」——
+        措辞可以不同是有意的（抽象是允许的）。把它当成语义校验会高估这道关卡的强度，
+        所以用一条测试把边界钉住，而不是让读者以为它拦得住一切。
+        """
+        report = run_eval(extractor=StubCardExtractor())
+        self.assertFalse(
+            any(r.uncarried for r in report.results),
+            "该形状按设计不会被可追溯性判据拦下；若这里变红，说明判据被加强了，请更新本说明",
+        )
 
     def test_case_exception_is_contained(self) -> None:
         def broken(messages):  # type: ignore[no-untyped-def]

@@ -207,5 +207,48 @@ class DocGuardTest(unittest.TestCase):
             )
 
 
+class WorktreeHygieneTest(unittest.TestCase):
+    """工作树的换行符必须与仓库约定一致——否则冻结哈希与 diff 都会出事。
+
+    这条守卫是踩了两次才加的，两次都由「脚本用 `read_text`/`write_text` 改文件」造成：
+    Windows 上 `write_text` 默认把 `\\n` 写成 `\\r\\n`，于是整个文件被静默转成 CRLF。
+
+    代价不只是 diff 变噪声：
+    - 冻结的留出集按 **SHA-256** 校验（`eval/split-manifest.json`），
+      换行符一变哈希立刻不符，`run_split_integrity.py` 会报「留出用例已被修改」——
+      而真正的改动可能只是编辑器/脚本换了行尾。
+    - `README.md` 是唯一按 CRLF 提交的文件（历史如此），所以它豁免。
+    """
+
+    #: 唯一允许 CRLF 的文件（它在 HEAD 里本来就是 CRLF）。
+    CRLF_ALLOWED = ("README.md",)
+
+    #: 不扫的目录：这些是产物而不是源文件（`.pyc` 里当然有 `\r\n` 字节）。
+    SKIP_DIRS = ("__pycache__", ".git", ".venv", "node_modules", "build", "dist", ".tmp")
+
+    def test_no_unexpected_carriage_returns(self) -> None:
+        offenders = []
+        for directory in ("docs", "src", "tools", "tests", "eval", "examples", "experiments"):
+            for path in sorted((ROOT / directory).rglob("*")):
+                if not path.is_file() or path.name in self.CRLF_ALLOWED:
+                    continue
+                parts = path.relative_to(ROOT).parts
+                if any(part in self.SKIP_DIRS for part in parts):
+                    continue
+                if b"\r\n" in path.read_bytes():
+                    offenders.append(str(path.relative_to(ROOT)).replace("\\", "/"))
+        self.assertEqual(
+            offenders, [],
+            "以下文件被转成了 CRLF（会破坏冻结哈希与 diff）；"
+            "改文件请用 read_bytes/write_bytes，不要用 write_text",
+        )
+
+    def test_frozen_holdout_files_are_lf(self) -> None:
+        """留出集是冻结对象：它的每个字节都进了 SHA-256，行尾绝不能漂。"""
+        for path in sorted((ROOT / "eval" / "holdout").glob("*.json")):
+            with self.subTest(case=path.name):
+                self.assertNotIn(b"\r\n", path.read_bytes())
+
+
 if __name__ == "__main__":
     unittest.main()

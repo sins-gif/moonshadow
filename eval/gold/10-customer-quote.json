@@ -21,7 +21,7 @@
     "都收到了，谢谢，辛苦大家。"
   ],
   "expected": {
-    "key_fields": ["2026-09-30", "30 万", "QT-2026-0916", "https://docs.example.com/quote", "5 万元", "4800 元"],
+    "key_fields": ["2026-09-30", "30 万", "`QT-2026-0916`", "https://docs.example.com/quote", "5 万元", "4800 元"],
     "tiers_present": ["T2", "T3", "T5"]
   }
 }

@@ -58,6 +58,13 @@ HISTORICAL_PREFIXES = ("v1.0", "v1.1")
 #: 新增此类文档必须显式登记在这里——否则会被 `check_classification` 拦下。
 LIVING = ("README.md", "backlog.md")
 
+#: **下一版的草案**。草案不是「现行」也不是「历史」：它描述尚未实现的东西，
+#: 所以不能按现行文档查（那会要求它承担已实现系统的数值准绳），也不能当历史归档
+#: （那要求它带「数据不作为依据」横幅，而它压根没有数据）。
+#: 对它的两条要求：必须声明与当前唯一权威的关系；受数值检查约束（防止草案里
+#: 悄悄出现与代码不一致的常量）。新增草案必须显式登记在 `DRAFTS`。
+DRAFT_PREFIXES = ("v1.3",)
+
 #: 历史文档必须带的状态标注。
 HISTORICAL_MARKERS = ("历史版本", "不作为当前依据")
 
@@ -84,6 +91,9 @@ CURRENT = (
     ROOT_README,
     ROOT_README_EN,
 )
+
+#: 下一版草案（必须声明与当前唯一权威的关系；受数值检查约束，但不受「现行」的其他要求约束）。
+DRAFTS = (DOCS / "v1.3-spec.md",)
 
 #: 赋值式：`IDENT = <number>`。只认这一种形式——「提及标识符」不算声称取值，
 #: 否则 `THETA_HIGH == THETA`、符号表、`f = 0.62（历史列）` 都会误报。
@@ -131,6 +141,11 @@ def is_living(path: pathlib.Path) -> bool:
     return path.parent == DOCS and path.name in LIVING
 
 
+def is_draft(path: pathlib.Path) -> bool:
+    """下一版的草案（尚未实现，因此既不是现行也不是历史）。"""
+    return path.parent == DOCS and path.name.startswith(DRAFT_PREFIXES)
+
+
 def check_links() -> list[str]:
     violations: list[str] = []
     for path in markdown_files():
@@ -162,19 +177,25 @@ def check_values() -> list[str]:
 
 
 def check_classification() -> list[str]:
-    """`docs/` 下每份文档都必须被显式分类：索引 / 活文档 / 现行版本 / 历史版本。
+    """`docs/` 下每份文档都必须被显式分类：索引 / 活文档 / 现行 / 历史 / 草案。
 
-    新增文档时若既不是现行前缀、也不是已登记的历史前缀或活文档，就会在这里被拦下——
-    迫使「升版」与「新增活文档」成为有意动作（更新 `HISTORICAL_PREFIXES` / `LIVING`）。
+    新增文档时若既不是现行前缀、也不是已登记的历史前缀、活文档或草案，就会在这里被拦下——
+    迫使「升版」「新增活文档」「起草下一版」都成为有意动作
+    （更新 `HISTORICAL_PREFIXES` / `LIVING` / `DRAFT_PREFIXES`）。
     """
     violations: list[str] = []
     for path in sorted(DOCS.rglob("*.md")):
-        if path.name.startswith(CURRENT_PREFIX) or is_historical(path) or is_living(path):
+        if (
+            path.name.startswith(CURRENT_PREFIX)
+            or is_historical(path)
+            or is_living(path)
+            or is_draft(path)
+        ):
             continue
         violations.append(
             f"{path.relative_to(ROOT)}：未分类。现行前缀是 {CURRENT_PREFIX}，"
-            f"历史前缀是 {HISTORICAL_PREFIXES}，活文档是 {LIVING}；"
-            f"新版本或新活文档请更新 audit_docs.py 的分类表"
+            f"历史前缀是 {HISTORICAL_PREFIXES}，活文档是 {LIVING}，草案前缀是 {DRAFT_PREFIXES}；"
+            f"新版本、新活文档或新草案请更新 audit_docs.py 的分类表"
         )
     return violations
 
@@ -246,14 +267,23 @@ def check_authority() -> list[str]:
         return [f"缺少权威文档 {SPEC.relative_to(ROOT)}"]
     if "本文件是契约" not in SPEC.read_text(encoding="utf-8"):
         violations.append(f"{SPEC.relative_to(ROOT)}：未声明自己是契约（缺「本文件是契约」）")
-    for path in CURRENT:
+    for path in (*CURRENT, *DRAFTS):
         if not path.exists():
-            violations.append(f"声明的现行文档不存在：{path.relative_to(ROOT)}")
+            violations.append(f"声明的现行/草案文档不存在：{path.relative_to(ROOT)}")
             continue
         if SPEC.name not in path.read_text(encoding="utf-8"):
             violations.append(
                 f"{path.relative_to(ROOT)}：未声明与 {SPEC.name} 的关系"
-                f"（现行文档必须指向唯一权威）"
+                f"（现行文档与草案都必须指向唯一权威）"
+            )
+    for path in DRAFTS:
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "草案" not in text:
+            violations.append(
+                f"{path.relative_to(ROOT)}：草案必须自报状态（缺「草案」字样）——"
+                f"否则读者会把它当成已实现的规格"
             )
     return violations
 
@@ -301,6 +331,8 @@ def inventory() -> list[tuple[str, str, int, int]]:
             status = "历史版本"
         elif is_living(path):
             status = "活文档"
+        elif is_draft(path):
+            status = "草案"
         else:
             status = "现行"
         text = path.read_text(encoding="utf-8")

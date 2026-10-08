@@ -13,11 +13,14 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from moonshadow.verify import (  # noqa: E402
+    QUALITATIVE_KEYWORDS,
+    SENTENCE_SPLIT_RE,
     Report,
     card_text,
     extract_key_fields,
     normalize,
     verify_no_silent_loss,
+    verify_qualitative_retention,
 )
 
 
@@ -84,6 +87,87 @@ class SilentLossTest(unittest.TestCase):
         text = card_text({"summary": "s", "facts": ["预算12万"], "todos": ["张三给报价"]})
         self.assertIn("预算12万", text)
         self.assertIn("张三给报价", text)
+
+
+class QualitativeRetentionTest(unittest.TestCase):
+    """定性内容判据：硬字段保住 ≠ 内容保住。
+
+    这一条来自 v1.3 Phase 0 的实测缺陷：只保留含硬字段的句子时，硬关卡
+    `recall = 1.0000`、只产生软告警，而全部决策与条件已经丢光——
+    「正常的抽象」与「错误的信息丢失」在关卡上不可区分。
+    """
+
+    RAW = [
+        {"id": "m1", "text": "决定先做读缓存，写路径这一轮不动。"},
+        {"id": "m2", "text": "压测数据 2026-09-30 之前给出。"},
+        {"id": "m3", "text": "好的，谢谢！"},
+    ]
+
+    def test_passes_when_every_qualitative_message_has_a_carrier(self) -> None:
+        report = verify_qualitative_retention(
+            self.RAW,
+            [
+                {"tier": "T2", "source_ids": ["m1"]},
+                {"tier": "T3", "source_ids": ["m2"]},
+                {"tier": "T8", "source_ids": ["m3"]},
+            ],
+        )
+        self.assertTrue(report.ok, report.summary())
+
+    def test_fails_when_decision_message_has_no_card(self) -> None:
+        report = verify_qualitative_retention(
+            self.RAW, [{"tier": "T3", "source_ids": ["m2"]}]
+        )
+        self.assertFalse(report.ok)
+        self.assertIn("qualitative", report.missing)
+        self.assertIn("m1", "".join(report.missing["qualitative"]))
+        self.assertIn("decision", "".join(report.missing["qualitative"]))
+        self.assertIn("FAIL", report.summary())
+
+    def test_greeting_card_is_not_a_carrier(self) -> None:
+        """寒暄/噪音卡按定义就是要丢的内容，不能充当决策的载体。"""
+        report = verify_qualitative_retention(
+            self.RAW,
+            [
+                {"tier": "T8", "source_ids": ["m1"]},
+                {"tier": "T9", "source_ids": ["m1"]},
+                {"tier": "T3", "source_ids": ["m2"]},
+            ],
+        )
+        self.assertFalse(report.ok)
+        self.assertIn("T8", "".join(report.missing["qualitative"]))
+
+    def test_negation_and_constraint_are_covered(self) -> None:
+        report = verify_qualitative_retention(
+            [{"id": "x", "text": "必须兼容旧版，不得删除 `adapter.py`。"}],
+            [],
+        )
+        self.assertFalse(report.ok)
+        kinds = "".join(report.missing["qualitative"])
+        self.assertIn("constraint", kinds)
+
+    def test_plain_message_needs_no_carrier(self) -> None:
+        """没有定性内容的句子不构成要求——判据不能把所有消息都变成硬约束。"""
+        report = verify_qualitative_retention(
+            [{"id": "n", "text": "本地 QPS 比线上高了将近四成。"}], []
+        )
+        self.assertTrue(report.ok, report.summary())
+
+    def test_keywords_and_splitter_match_compress(self) -> None:
+        """词表与句子切分在 `verify` 里各有一份副本（循环依赖），必须与 `compress` 同步。"""
+        from moonshadow.compress import SENTENCE_SPLIT_RE as COMPRESS_SPLIT
+        from moonshadow.compress import TIER_KEYWORDS
+
+        tier_words = {tier: words for tier, words in TIER_KEYWORDS}
+        self.assertEqual(
+            set(QUALITATIVE_KEYWORDS["decision"]), set(tier_words["T2"]),
+            "decision 词表必须与 compress 的 T2 判定词一致",
+        )
+        self.assertEqual(
+            set(QUALITATIVE_KEYWORDS["constraint"]), set(tier_words["T0"]),
+            "constraint 词表必须与 compress 的 T0 判定词一致",
+        )
+        self.assertEqual(SENTENCE_SPLIT_RE.pattern, COMPRESS_SPLIT.pattern)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 |---|---|
 | **Repository** | <https://github.com/sins-gif/moonshadow> |
 | **Version** | `v1.2.0` ([code at this version](https://github.com/sins-gif/moonshadow/tree/v1.2.0) ｜ `git tag v1.2.0`) |
-| **Minimal rerun** | `python -m unittest discover -s tests` → `Ran 206 tests` + `OK` |
+| **Minimal rerun** | `python -m unittest discover -s tests` → `Ran 216 tests` + `OK` |
 
 > **This version is the data-driven parameter-convergence release**: `f = 0.5925`, `θ = θ′ = 0.3941`, default scheme multiplicative;
 > `T9` is covered on the negative side only (the gap is on record). Sealed-release reading: **all 13 tools exit `0`**.
@@ -17,6 +17,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 - **Documentation index / where to start**: `docs/README.md` ← authority map, reading order, maintenance rules
 - Technical report (evidence): `docs/v1.2-weights.md` ｜ Handover overview: `docs/v1.2-summary.md`
 - Reserved proposals and batch-acceptance rules: `docs/v1.2-roadmap.md` ｜ Proposal evaluation: `docs/v1.2-candidates.md`
+- **Next-version draft (not implemented)**: `docs/v1.3-spec.md` ← Phase 1 interface contract only (C1–C4 settled, Q1–Q3 open)
 - **Historical versions (records of the thinking process; their data is not to be relied on)**: `docs/v1.1-*.md`, `docs/v1.0-moonshadow.md`
 - Data contract: `schema.json` ｜ DDL: `ddl.sql`
 
@@ -26,7 +27,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 - **Bounded multiplicative correction** (`q = r · m`, `m ∈ [f, 1]`) avoids the **threshold-inseparability** defect of additive fusion:
   on the same case set, additive reverses `117` pairs inside the region where multiplicative is **guaranteed** not to, while multiplicative goes out of bounds `0` times;
   additive's ranking agreement **also ties at full marks** (`1.000` vs `1.000`) — **a defect that ranking metrics cannot see, exposed by threshold calibration and the drift experiment**.
-- **206 unit assertions + 13 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
+- **216 unit assertions + 13 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
   whether negatives are really blocked by the gate, whether the holdout set has been modified, whether the assignment forms in the docs match the code — **all executable and re-runnable**.
 
 ## Project status (v1.2)
@@ -39,7 +40,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
   - tier `T9` **has no positive case yet**; it is currently covered on the negative side (`22-t9-noise-blocked-by-tier`); the gap is recorded in `docs/backlog.md`;
   - **the three grouped `f` values are still undetermined**; this version adopts a single floor;
   - the holdout set **has already been spent once** on the `θ` family, so the next parameter decision needs a new holdout set;
-  - the extractor is not wired in, and the compression ratio is `0.437x` (**inflating** tokens; both conventions in spec §9.2);
+  - the extractor is not wired in, and the compression ratio is `0.436x` (**inflating** tokens; both conventions in spec §9.2);
   - 10 half-lives and 2 age windows are still placeholders and have never been swept.
   See [`docs/v1.2-summary.md`](docs/v1.2-summary.md) and [`docs/v1.2-roadmap.md`](docs/v1.2-roadmap.md) §7.
 
@@ -48,7 +49,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 No dependencies to install (Python 3.10+, standard library only):
 
 ```bash
-python -m unittest discover -s tests   # deterministic tests: count and status are whatever this command prints (measured for this delivery: Ran 206 tests + OK)
+python -m unittest discover -s tests   # deterministic tests: count and status are whatever this command prints (measured for this delivery: Ran 216 tests + OK)
 
 # Audits and contracts (four of them; all should report 0 violations)
 python tools/run_case_audit.py          # case age windows and T8/T9 gate preconditions
@@ -99,15 +100,15 @@ were overturned and why, and `docs/v1.2-summary.md` §4 summarises the invalidat
 | Metric | Meaning | Current baseline |
 |---|---|---|
 | Key-field retention | whether dates/amounts/URLs/code were lost (threshold 0.98) | 1.000 |
-| Compression ratio | raw tokens / card tokens; higher is better | **0.437x** (per-case mean) / **0.443x** (token-weighted) |
+| Compression ratio | raw tokens / card tokens; higher is better | **0.436x** (per-case mean) / **0.442x** (token-weighted) |
 
-Watching retention alone invites gaming, and watching compression alone loses fields. The measured baseline compression ratio is **0.437x** — it **inflates** tokens,
+Watching retention alone invites gaming, and watching compression alone loses fields. The measured baseline compression ratio is **0.436x** — it **inflates** tokens,
 because the spec requires `T0`/`T1` to "keep the raw text", and the baseline copies the raw passage into `raw_quote` and then restates the same fields sentence by sentence in
 `facts`/`decisions`/`todos`. This is the baseline cost of complying with the spec, not a bug: it marks the recall ceiling for "lose no field",
 and the model extractor's job is to push the compression ratio above 1 while holding that retention. The gate warns about this explicitly.
 
 The tool also prints a **per-tier reading** (`T0–T9`: cards / raw tokens / card tokens / compression ratio / share of card tokens), which turns "where does the inflation happen"
-into a number: `T0` currently sits at `0.292x` (the raw passage is copied verbatim into `raw_quote`), `T2`/`T3` at `0.384x`/`0.393x` (whole sentences restated), while `T6` reaches
+into a number: `T0` currently sits at `0.292x` (the raw passage is copied verbatim into `raw_quote`), `T2`/`T3` at `0.383x`/`0.393x` (whole sentences restated), while `T6` reaches
 `0.977x` (plain narrative has no field to restate). Tiers that produced no card show `—` (unobservable), not `0.00x` (badly compressed).
 Both compression conventions and the metric's domain of validity are in `docs/v1.2-spec.md` §9.2–§9.3: **the gold set has been expanded from 3 short cases to 25**
 (22 of them long sessions), because with a one-sentence input no correct system can exceed 1x — the metric is not interpretable at that size.
@@ -241,7 +242,7 @@ moonshadow/
 ├── src/moonshadow/      17 files / 16 modules (standard library only)
 ├── tools/               13 executable commands (audits + evaluation + re-split + guards)
 ├── eval/                case sets: gold 3 + rank 26 + holdout 9 (frozen) + network 48 + frozen manifest
-├── tests/               14 test files / 206 assertions
+├── tests/               14 test files / 216 assertions
 ├── examples/demo.py     end-to-end demo
 └── experiments/         the user's own hand computations (kept verbatim, must not be modified; see the notes in the files)
 ```
@@ -294,7 +295,7 @@ src/moonshadow/
   network_eval.py       network assignment evaluation: confusion matrix + strict/attainable dual readings
   network_rules.py      class-level vocabulary rules for the four network types (independent of tier)
   drift.py              measurement of reversal regions under parameter drift (empirical evidence that the additive scheme has no ratio bound)
-tests/                  acceptance tests for Phase 1 / 2 / 2.5 / 3 (14 test files; `Ran 206 tests` + `OK`, whatever the command prints is authoritative)
+tests/                  acceptance tests for Phase 1 / 2 / 2.5 / 3 (14 test files; `Ran 216 tests` + `OK`, whatever the command prints is authoritative)
 experiments/            the user's own hand computations (kept verbatim, must not be modified; see the notes in the files)
 examples/demo.py        end-to-end demo
 ```
@@ -343,7 +344,7 @@ the holdout set must not be modified (enforced by `run_split_integrity.py`); and
 which must really be blocked by the production gate with a `reason` matching the actual rule (enforced by `run_gate_audit.py`).
 
 **Not implemented yet** (the contracts are fixed; see `docs/v1.2-spec.md` §12): a callable LLM extractor
-(the current compression ratio is `0.437x`, inflating tokens), an intent classifier (`time_sensitivity` relies only on a hand-written word list,
+(the current compression ratio is `0.436x`, inflating tokens), an intent classifier (`time_sensitivity` relies only on a hand-written word list,
 and the experiments have exposed its ceiling), FTS5/vector retrieval wiring, entity resolution, a conflict detector, an MCP server,
 daily checks and retention cleanup, and encryption.
 

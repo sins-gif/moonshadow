@@ -72,7 +72,13 @@ from .compress import (
 from .pack import estimate_tokens
 from .store import Store
 from .tiers import TIER_ORDER
-from .verify import card_text_many, extract_key_fields, normalize, verify_no_silent_loss
+from .verify import (
+    card_text_many,
+    extract_key_fields,
+    normalize,
+    verify_no_silent_loss,
+    verify_qualitative_retention,
+)
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_GOLD_DIR = ROOT / "eval" / "gold"
@@ -161,6 +167,8 @@ class CaseResult:
     card_tokens: int = 0
     tier_stats: dict[str, TierStat] = field(default_factory=dict)
     shared_sources: int = 0
+    #: 定性内容（决策/硬约束/否定）没有载体的条目。见 `verify.verify_qualitative_retention`。
+    uncarried: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         verdict = "PASS" if self.ok else "FAIL"
@@ -172,6 +180,8 @@ class CaseResult:
         details = []
         if self.lost:
             details.append(f"丢字段={self.lost}")
+        if self.uncarried:
+            details.append(f"定性内容无载体={self.uncarried}")
         if self.missing_expected:
             details.append(f"缺预期字段={self.missing_expected}")
         if self.missing_tiers:
@@ -344,6 +354,12 @@ def run_case(
         cards = store.cards(session_id=session)
         raw_text = "\n".join(case.messages)
         report = verify_no_silent_loss(raw_text, cards)
+        # 定性内容判据：硬字段保住 ≠ 内容保住（决策/约束/否定一个硬字段都没有）。
+        raw_messages = [
+            {"id": row["id"], "text": store.get_raw(str(row["id"]))}
+            for row in store.messages_for_session(session)
+        ]
+        qualitative = verify_qualitative_retention(raw_messages, cards)
 
         extracted = extract_key_fields(raw_text)
         total_fields = sum(len(values) for values in extracted.values())
@@ -362,7 +378,7 @@ def run_case(
         tier_stats, shared = _tier_stats(cards, store)
         return CaseResult(
             case_id=case.id,
-            ok=report.ok and not missing_expected and not missing_tiers,
+            ok=report.ok and qualitative.ok and not missing_expected and not missing_tiers,
             recall=recall,
             total_fields=total_fields,
             lost=dict(report.missing),
@@ -375,6 +391,7 @@ def run_case(
             card_tokens=card_tokens,
             tier_stats=tier_stats,
             shared_sources=shared,
+            uncarried=list(qualitative.missing.get("qualitative", [])),
         )
     except Exception as exc:  # 单条用例异常不应掩盖其他用例的结果
         return CaseResult(

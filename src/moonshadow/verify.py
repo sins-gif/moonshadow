@@ -28,6 +28,35 @@ SOFT_PATTERNS: dict[str, str] = {
     "condition": r"(?:如果|若|一旦|当.+时|前提是|除非)",
 }
 
+#: **定性内容判据**用的三类关键词。这是 v1.3 Phase 0 补的第二道关卡：
+#: 硬字段（日期/金额/URL/代码）保住 ≠ 内容保住——「决定先做读缓存」「绝不带病上线」
+#: 这类句子一个硬字段都没有，丢光了也不会让硬关卡变红。
+#:
+#: 与 `compress.TIER_KEYWORDS` 的 `T0`/`T2` 是**同一批词**：`compress` 依赖 `verify`
+#: （`extract_key_fields`），因此 `verify` 不能反向 import，只能复制一份；
+#: `tests/test_precision.py` 有同步断言，改了任一侧就会红。
+QUALITATIVE_KEYWORDS: dict[str, tuple[str, ...]] = {
+    # T2 的判定词表：决策/结论
+    "decision": ("决定", "采用", "确定", "拍板", "选定", "结论", "同意", "敲定"),
+    # T0 的判定词表：硬约束
+    "constraint": ("必须", "不得", "不要", "禁止", "避免", "硬性", "合规", "法律", "安全", "不可"),
+    # 与 SOFT_PATTERNS["negation"] 同一批词
+    "negation": ("不要", "不得", "不能", "不会", "不需要", "无需", "禁止", "避免", "除非", "没有", "不是"),
+}
+
+QUALITATIVE_PATTERNS: dict[str, re.Pattern[str]] = {
+    kind: re.compile("|".join(re.escape(word) for word in words))
+    for kind, words in QUALITATIVE_KEYWORDS.items()
+}
+
+#: 句子切分。与 `compress.SENTENCE_SPLIT_RE` 同一套（同样因循环依赖只能复制，
+#: 由 `tests/test_precision.py` 的同步断言钉住）。
+SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？!?\n])")
+
+#: 哪些层级的卡**不算**定性内容的载体。寒暄卡与噪音卡可以引用原文，但把它们
+#: 当作「决策有载体」是空头支票：T8/T9 的内容按定义就是要丢掉的。
+CARRY_FORBIDDEN_TIERS: tuple[str, ...] = ("T8", "T9")
+
 CARD_TEXT_FIELDS = (
     "summary",
     "raw_quote",
@@ -123,3 +152,73 @@ def verify_no_silent_loss(
 
 def card_text_many(cards: Sequence[Mapping[str, Any]]) -> str:
     return "\n".join(card_text(card) for card in cards)
+
+
+def qualitative_sentences(text: str) -> list[tuple[str, str]]:
+    """挑出原文里的定性句子，返回 `(kind, 句子)` 列表（按出现顺序，同句只取一次）。"""
+    found: list[tuple[str, str]] = []
+    for sentence in SENTENCE_SPLIT_RE.split(text):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        for kind, pattern in QUALITATIVE_PATTERNS.items():
+            if pattern.search(sentence):
+                found.append((kind, sentence))
+                break
+    return found
+
+
+def verify_qualitative_retention(
+    messages: Sequence[Mapping[str, Any]],
+    cards: Sequence[Mapping[str, Any]],
+) -> Report:
+    """**定性内容必须有载体**：决策 / 硬约束 / 否定句所在的消息，必须被某张卡引用。
+
+    为什么必须有这一条：硬关卡只认日期/金额/URL/代码。v1.3 Phase 0 实测过——
+    一个「只保留含硬字段的句子」的抽取器在硬关卡上 `recall = 1.0000`、只产生软告警，
+    却把全部决策与条件丢光。这样一来，**正常的抽象**与**错误的信息丢失**在关卡上不可区分。
+
+    判据的粒度落在**消息**上，与句子粒度等价：载体要求本身就是按 `source_id` 追溯的
+    （措辞可以不同，抽象是允许的），所以同一个消息里的三条定性句子要么都有载体、
+    要么都没有。逐句报只会把同一条失败重复三遍。
+
+    两道边界：
+
+    - **载体不能是 `T8/T9` 卡**（`CARRY_FORBIDDEN_TIERS`）。寒暄卡与噪音卡按定义就是要丢的，
+      让它们充当载体等于把这条判据变成空头支票。
+    - **只看「有没有卡引用」，不看卡里写了什么**。措辞可以不同，这是有意的：
+      这一条是必要条件，不是充分条件——它拦不住「引用了却没写进去」，
+      但那属于模型模糊校验（第二级）的职责，硬关卡不该假装能判语义。
+    """
+    cited: dict[str, list[str]] = {}
+    for card in cards:
+        tier = str(card.get("tier", ""))
+        for source_id in card.get("source_ids", ()):
+            cited.setdefault(str(source_id), []).append(tier)
+
+    report = Report()
+    uncarried: list[str] = []
+    for message in messages:
+        source_id = str(message.get("id", ""))
+        text = str(message.get("text", ""))
+        flagged = qualitative_sentences(text)
+        if not flagged:
+            continue
+        carriers = [
+            tier for tier in cited.get(source_id, ()) if tier not in CARRY_FORBIDDEN_TIERS
+        ]
+        if carriers:
+            continue
+        kinds = "、".join(dict.fromkeys(kind for kind, _ in flagged))
+        detail = "；".join(sentence[:40] for _, sentence in flagged[:2])
+        if cited.get(source_id):
+            uncarried.append(
+                f"{source_id}（{kinds}）只有 {'/'.join(sorted(set(cited[source_id])))} 卡引用，"
+                f"不算载体 → {detail}"
+            )
+        else:
+            uncarried.append(f"{source_id}（{kinds}）没有任何卡引用 → {detail}")
+
+    if uncarried:
+        report.missing["qualitative"] = uncarried
+    return report
