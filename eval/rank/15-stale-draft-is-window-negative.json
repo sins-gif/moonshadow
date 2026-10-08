@@ -1,0 +1,16 @@
+{
+  "id": "15-stale-draft-is-window-negative",
+  "needs_fresh": false,
+  "note": "覆盖 T7（超窗侧）。原则(e)：T6/T7 需卡龄 ≤ 7 天；20 天的草稿由**门槛**挡掉，而非由分数。这条是「正确的窗口负例」——与先前 9 张把超窗卡当正例的用例相反。正例用 T3（无卡龄窗口）。",
+  "query": {
+    "text": "接口草案的最终版在哪？",
+    "entities": ["接口"]
+  },
+  "candidates": [
+    {"id": "final-spec", "tier": "T3", "importance": 6, "age_days": 40, "cos": 0.75, "entities": ["接口"], "task_hit": false}
+  ],
+  "exclude": [
+    {"id": "stale-draft", "reason": "window", "tier": "T7", "importance": 3, "age_days": 20, "cos": 0.88, "entities": ["接口"], "task_hit": false}
+  ],
+  "expect_order": ["final-spec"]
+}

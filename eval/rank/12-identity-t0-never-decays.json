@@ -1,0 +1,14 @@
+{
+  "id": "12-identity-t0-never-decays",
+  "needs_fresh": false,
+  "note": "覆盖 T0 零正例。原则(d)：T0 半衰期为 0，修正系数恒为上限，因此它始终以**完整相关性分**参与排序。身份级信息即使极旧（800 天）也不被时间削减。",
+  "query": {
+    "text": "我的项目叫什么名字？",
+    "entities": ["项目"]
+  },
+  "candidates": [
+    {"id": "identity-t0", "tier": "T0", "importance": 10, "age_days": 800, "cos": 0.55, "entities": ["项目"], "task_hit": false},
+    {"id": "recent-mention", "tier": "T5", "importance": 3, "age_days": 0.5, "cos": 0.80, "entities": ["项目"], "task_hit": false}
+  ],
+  "expect_order": ["identity-t0", "recent-mention"]
+}

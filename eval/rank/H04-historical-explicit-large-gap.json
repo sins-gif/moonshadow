@@ -1,0 +1,14 @@
+{
+  "id": "H04-historical-explicit-large-gap",
+  "needs_fresh": false,
+  "note": "原则(a)强化：显式历史提问（「当初为什么」）时，陈旧但高相关的原始理由优先于新鲜的低相关提及。这条会**惩罚把 floor 降得过低**的策略：floor 越低，新鲜的低相关卡越容易翻盘。",
+  "query": {
+    "text": "当初为什么放弃自建存储？",
+    "entities": ["自建存储"]
+  },
+  "candidates": [
+    {"id": "original-reason", "tier": "T2", "importance": 9, "age_days": 400, "cos": 0.90, "entities": ["自建存储"], "task_hit": false},
+    {"id": "fresh-mention", "tier": "T5", "importance": 3, "age_days": 0.5, "cos": 0.45, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["original-reason", "fresh-mention"]
+}

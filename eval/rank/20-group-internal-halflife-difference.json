@@ -1,0 +1,14 @@
+{
+  "id": "20-group-internal-halflife-difference",
+  "needs_fresh": false,
+  "note": "边界用例（组内边界）：T4 与 T5 同属 mid 组，重要度、相似度、卡龄完全相同，只有半衰期不同（T4 较长）。原则：同等相关、同等卡龄时，**衰减更慢的层级先**。这条检验「决定次序的不只是卡龄，还有层级本身」——分组 f 相等时，组内仍存在结构性差异。",
+  "query": {
+    "text": "接口超时时间设多少？",
+    "entities": ["接口"]
+  },
+  "candidates": [
+    {"id": "t4-plan", "tier": "T4", "importance": 5, "age_days": 10, "cos": 0.70, "entities": ["接口"], "task_hit": false},
+    {"id": "t5-note", "tier": "T5", "importance": 5, "age_days": 10, "cos": 0.70, "entities": ["接口"], "task_hit": false}
+  ],
+  "expect_order": ["t4-plan", "t5-note"]
+}

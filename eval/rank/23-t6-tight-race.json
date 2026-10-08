@@ -1,0 +1,14 @@
+{
+  "id": "23-t6-tight-race",
+  "needs_fresh": true,
+  "note": "原则 (b)：中等相关性差距 + 明显更新 → 新的胜出。两张**同层级 T6**草稿：新的一张相关性略低（s=0.77），旧的一张相关性更高（s=0.97），卡龄差 3 天。期望顺序由该原则独立给出，不依赖扫描结果；数值按路线图 §7.1 的 R1 要求刻意贴近决策边界（实测相邻分差 0.0101），因此这条用例的**作用是约束可行区**，而不是提供覆盖——它从**上侧**约束采纳下限（f < 0.660）。",
+  "query": {
+    "text": "缓存层现在用哪个方案？",
+    "entities": ["缓存层"]
+  },
+  "candidates": [
+    {"id": "newer-draft", "tier": "T6", "importance": 5, "age_days": 2, "cos": 0.77, "entities": ["缓存层"], "task_hit": false},
+    {"id": "older-draft", "tier": "T6", "importance": 5, "age_days": 5, "cos": 0.97, "entities": ["缓存层"], "task_hit": false}
+  ],
+  "expect_order": ["newer-draft", "older-draft"]
+}

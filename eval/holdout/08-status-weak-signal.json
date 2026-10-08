@@ -1,0 +1,14 @@
+{
+  "id": "08-status-weak-signal",
+  "intent": "status",
+  "note": "对抗用例（漏判方向）：确属状态提问，但措辞里没有任何状态标记。敏感度启发式会给 0，从而漏判。与第 06 号不同，这条漏判**没有**导致排序错误——正是它证明「意图识别指标」与「排序一致率」必须分开报。**场景重写（P0）**：old-quote 原为 150 天，超出 T5 的 30 天窗口；改为 28 天（约两个半衰期）。",
+  "query": {
+    "text": "报价到哪一步了？",
+    "entities": ["报价"]
+  },
+  "candidates": [
+    {"id": "new-quote", "tier": "T5", "importance": 3, "age_days": 0.3, "cos": 0.72, "entities": ["报价"], "task_hit": false},
+    {"id": "old-quote", "tier": "T5", "importance": 3, "age_days": 28, "cos": 0.75, "entities": ["报价"], "task_hit": false}
+  ],
+  "expect_order": ["new-quote", "old-quote"]
+}

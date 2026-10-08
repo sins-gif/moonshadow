@@ -1,0 +1,14 @@
+{
+  "id": "H07-progress-fresh-irrelevant-must-not-win",
+  "needs_fresh": true,
+  "note": "原则(a)：问「卡在哪一步」虽然是时效性问题，但最新那条完全无关，不得翻盘。这条专门用来**惩罚过度降低 floor**：floor 越低，无关的新卡越容易挤掉相关的旧卡。",
+  "query": {
+    "text": "联调卡在哪一步了？",
+    "entities": ["联调"]
+  },
+  "candidates": [
+    {"id": "blocker-note", "tier": "T3", "importance": 7, "age_days": 25, "cos": 0.85, "entities": ["联调"], "task_hit": true},
+    {"id": "unrelated-fresh", "tier": "T6", "importance": 2, "age_days": 0.3, "cos": 0.20, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["blocker-note", "unrelated-fresh"]
+}

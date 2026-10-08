@@ -1,0 +1,15 @@
+{
+  "id": "01-historical-decision",
+  "intent": "historical",
+  "note": "问「当初为什么这么定」：一年前的决策卡是高相关的事实来源，不该被新鲜闲聊挤掉。三种方案预期都能过。",
+  "query": {
+    "text": "当初为什么选方案B？",
+    "entities": ["方案B"]
+  },
+  "candidates": [
+    {"id": "stale-decision", "tier": "T2", "importance": 9, "age_days": 365, "cos": 0.95, "entities": ["方案B"], "task_hit": false},
+    {"id": "week-discussion", "tier": "T4", "importance": 5, "age_days": 7, "cos": 0.60, "entities": [], "task_hit": false},
+    {"id": "recent-chat", "tier": "T5", "importance": 2, "age_days": 0.02, "cos": 0.55, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["stale-decision", "week-discussion", "recent-chat"]
+}

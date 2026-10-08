@@ -1,0 +1,15 @@
+{
+  "id": "25-t8-explicit-recall",
+  "needs_fresh": true,
+  "explicit_recall": true,
+  "note": "原则 (e)：T8/T9 只在**显式回溯请求**时才进入候选池，与分数无关——所以本条的 `explicit_recall` 必须为 true，否则该 T8 正例会被门前置判为违规（见 run_case_audit.py）。查询是「把刚说的东西再调出来」，因此 T8（会话级瞬时态，半衰期 1 天、卡龄 0.3 天）应当进入候选池并排在首位；与之紧咬的是一张 T5（Δ=10、相关性更高 s=0.95）。数值按 R1 刻意贴近边界（实测相邻分差 0.0101），从**上侧**约束采纳下限（f < 0.660）。",
+  "query": {
+    "text": "我刚说的那个缓存方案，再调出来看看",
+    "entities": ["缓存层"]
+  },
+  "candidates": [
+    {"id": "just-said-t8", "tier": "T8", "importance": 5, "age_days": 0.3, "cos": 0.76, "entities": ["缓存层"], "task_hit": false},
+    {"id": "older-t5-fact", "tier": "T5", "importance": 5, "age_days": 10, "cos": 0.95, "entities": ["缓存层"], "task_hit": false}
+  ],
+  "expect_order": ["just-said-t8", "older-t5-fact"]
+}

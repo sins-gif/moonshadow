@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 本仓库的运行产物（测试与评测都在这里建库；不要入库）
+.tmp/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# 机密（本项目不需要任何凭据，出现即为误放）
+.env
+.env.*
+*.key
+*.pem
+*.p12
+
+# 大文件与归档（Git 不做体积限制，靠这里挡住常见类型；
+# 真正的体积门禁需要 pre-commit 钩子，见 README「目录」一节的说明）
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+*.bin
+*.pack
+*.model
+*.onnx
+*.pt
+*.safetensors
+
+# 编辑器与操作系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+
+# 工具缓存
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/

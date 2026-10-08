@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://moonshadow.local/schema/memory-card-v1.json",
+  "title": "Moonshadow Memory Card",
+  "description": "T0-T9 时间分层记忆卡（Phase 0 数据契约）。SQLite 为唯一真相源，本 schema 是写入前的强制校验契约。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "session_id",
+    "tier",
+    "importance",
+    "network",
+    "observed_at",
+    "status",
+    "source_ids",
+    "summary",
+    "dedup_key"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^mem_[0-9]{8}_[a-z2-7]{10}$",
+      "description": "内容寻址 ID：mem_<YYYYMMDD>_<base32(sha256(session|sorted(source_ids)))[:10]>"
+    },
+    "schema_version": { "type": "integer", "const": 1 },
+    "session_id": { "type": "string", "minLength": 1 },
+    "tier": {
+      "type": "string",
+      "enum": ["T0", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9"]
+    },
+    "importance": { "type": "integer", "minimum": 1, "maximum": 10 },
+    "network": {
+      "type": "string",
+      "enum": ["world", "experience", "opinion", "observation"]
+    },
+    "observed_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "valid_from": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "valid_to": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "half_life_days": {
+      "type": "number",
+      "minimum": 0,
+      "description": "0 表示不衰减（T0）。decay = 0.5 ** (delta_days / half_life_days)"
+    },
+    "last_access": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "access_count": { "type": "integer", "minimum": 0 },
+    "status": {
+      "type": "string",
+      "enum": ["active", "superseded", "source_expired", "archived"]
+    },
+    "source_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "supersedes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string" }
+    },
+    "superseded_by": { "type": ["string", "null"] },
+    "entities": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "必须完成实体消解，禁止残留代词"
+    },
+    "keywords": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "facts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "decisions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "todos": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "constraints": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "raw_quote": { "type": ["string", "null"] },
+    "confidence": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "未知置信度写 null；禁止编造（对应 v1.0 §7A「不确定写不确定」）"
+    },
+    "dedup_key": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "sha256(tier|source_ids|summary)，唯一索引，保证压缩幂等"
+    },
+    "claims": {
+      "type": "array",
+      "description": "结构化断言，冲突检测与「观点演变」的数据来源",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "predicate"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["fact", "decision", "todo", "constraint", "preference"]
+          },
+          "subject_entity": { "type": ["string", "null"] },
+          "predicate": { "type": "string", "minLength": 1 },
+          "object": { "type": ["string", "null"] },
+          "polarity": { "type": "integer", "minimum": 0, "maximum": 1 },
+          "due_at": {
+            "type": ["string", "null"],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "valid_from": {
+            "type": ["string", "null"],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "valid_to": {
+            "type": ["string", "null"],
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          }
+        }
+      }
+    }
+  }
+}

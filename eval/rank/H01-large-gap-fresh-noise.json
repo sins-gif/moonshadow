@@ -1,0 +1,14 @@
+{
+  "id": "H01-large-gap-fresh-noise",
+  "needs_fresh": false,
+  "note": "原则(a)：相关性差距大时，新鲜度不得翻盘。旧的复盘结论命中查询实体，新的是完全无关的闲聊。期望顺序与 floor 取值无关。",
+  "query": {
+    "text": "上季度复盘的结论是什么？",
+    "entities": ["复盘"]
+  },
+  "candidates": [
+    {"id": "review-summary", "tier": "T2", "importance": 8, "age_days": 120, "cos": 0.88, "entities": ["复盘"], "task_hit": false},
+    {"id": "fresh-noise", "tier": "T5", "importance": 2, "age_days": 0.2, "cos": 0.22, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["review-summary", "fresh-noise"]
+}

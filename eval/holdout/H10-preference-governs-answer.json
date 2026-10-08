@@ -1,0 +1,14 @@
+{
+  "id": "H10-preference-governs-answer",
+  "needs_fresh": false,
+  "note": "长期偏好（T1）在该查询下既更相关也更旧：它决定「答案该怎么写」，因此优先于新鲜的通用提示。同时检验时间修正不会误伤 T1 的长半衰期特性。",
+  "query": {
+    "text": "帮我写个部署脚本",
+    "entities": ["部署脚本"]
+  },
+  "candidates": [
+    {"id": "script-style", "tier": "T1", "importance": 9, "age_days": 30, "cos": 0.75, "entities": ["部署脚本"], "task_hit": false},
+    {"id": "fresh-tip", "tier": "T5", "importance": 4, "age_days": 0.2, "cos": 0.60, "entities": ["部署脚本"], "task_hit": false}
+  ],
+  "expect_order": ["script-style", "fresh-tip"]
+}

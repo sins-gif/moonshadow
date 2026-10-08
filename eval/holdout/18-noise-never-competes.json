@@ -1,0 +1,16 @@
+{
+  "id": "18-noise-never-competes",
+  "needs_fresh": false,
+  "note": "覆盖 T9 零正例。原则(e)：T9 可丢弃，仅在显式回溯时保留；本场景无显式回溯，因此噪音必须由层级规则排除。正例是 T2 决策卡（无卡龄窗口）。",
+  "query": {
+    "text": "方案C的预算是多少？",
+    "entities": ["方案C"]
+  },
+  "candidates": [
+    {"id": "budget-c3", "tier": "T2", "importance": 8, "age_days": 20, "cos": 0.90, "entities": ["方案C"], "task_hit": false}
+  ],
+  "exclude": [
+    {"id": "noise", "reason": "tier", "tier": "T9", "importance": 1, "age_days": 0.05, "cos": 0.35, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["budget-c3"]
+}

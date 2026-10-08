@@ -1,0 +1,14 @@
+{
+  "id": "H02-moderate-gap-much-newer",
+  "needs_fresh": true,
+  "note": "原则(b)：相关性差距中等、新旧差距明显时，较新者优先——即便旧卡的字面相似度更高。**场景重写（P0）**：old-plan 原为 T4/55 天，超出 T4 的 30 天窗口；T4 顶到窗口上界也只能衰减到 81%，无法表达「陈旧」，故改判为 T5/29 天（约两个半衰期）。**本文件已被修改**：其在此前留出验证中的效力不再适用于当前版本，下一次参数决策需要新的留出集（见 v1.2-roadmap.md §7.1）。",
+  "query": {
+    "text": "缓存层换用什么方案了？",
+    "entities": ["缓存层"]
+  },
+  "candidates": [
+    {"id": "old-plan", "tier": "T5", "importance": 7, "age_days": 29, "cos": 0.95, "entities": ["缓存层"], "task_hit": false},
+    {"id": "new-plan", "tier": "T5", "importance": 4, "age_days": 1.5, "cos": 0.60, "entities": ["缓存层"], "task_hit": false}
+  ],
+  "expect_order": ["new-plan", "old-plan"]
+}

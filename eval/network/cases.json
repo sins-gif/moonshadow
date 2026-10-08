@@ -1,0 +1,73 @@
+{
+  "description": "network 字段的标注集。用于分离「schema 本身难」与「分类器弱」两种假设。标签由人工标注，非模型生成。",
+  "protocol": {
+    "split": "dev = 规则改进时可见；holdout = 规则改进前写完、改进后只用一次。",
+    "expected": "严格指标使用的唯一正确标签。",
+    "alternates": "可辩护的备选标签，用于宽松指标；为空表示该条只有唯一可辩护答案。",
+    "unattainable": "四张网络里没有正确类别（schema 缺口）。这类用例任何人都无法答对，用于计算上限。",
+    "ceiling": "1 − unattainable 占比 = 任何分类器都达不到的份额之上的理论上限。"
+  },
+  "networks": {
+    "world": "客观事实、外部世界状态（配置、版本、地址、金额、日期）",
+    "experience": "经验、教训、做法、决定及其理由（约定、流程、踩坑）",
+    "opinion": "主观意见、偏好、倾向（我觉得、更喜欢、宁愿）",
+    "observation": "日常观察、闲聊、一次性现象"
+  },
+  "cases": [
+    {"id": "N01", "split": "dev", "text": "生产库是 PostgreSQL 15，字符集 UTF8。", "expected": "world", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N02", "split": "dev", "text": "办公地址在浦东新区张江路 100 号。", "expected": "world", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N03", "split": "dev", "text": "旧版 API 的限流是 100 QPS。", "expected": "world", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N04", "split": "dev", "text": "客户公司名叫星海科技。", "expected": "world", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N05", "split": "dev", "text": "接口当前延迟是 120ms。", "expected": "world", "boundary": true, "alternates": ["observation"], "unattainable": false, "note": "可测的客观状态；但它会变，也可算 observation。界线模糊。"},
+    {"id": "N06", "split": "dev", "text": "客户说预算 12 万。", "expected": "world", "boundary": true, "alternates": ["experience"], "unattainable": false, "note": "外部给定的事实，但属于本项目语境；也可算 experience。"},
+
+    {"id": "N07", "split": "dev", "text": "决定采用方案B，理由是改造成本最低。", "expected": "experience", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N08", "split": "dev", "text": "踩过一次坑：连接池不设上限会导致雪崩。", "expected": "experience", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N09", "split": "dev", "text": "重构时不要删除 legacy_adapter.py，它是兼容层的入口。", "expected": "experience", "boundary": false, "alternates": [], "unattainable": false, "note": "基线因「不要」被判成 T0，network 随之变 world——tier 泄漏。"},
+    {"id": "N10", "split": "dev", "text": "我们约定提交信息用中文。", "expected": "experience", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N11", "split": "dev", "text": "上次这样做失败了，所以这次先加灰度。", "expected": "experience", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N12", "split": "dev", "text": "张三负责在 9 月 30 日前给出报价。", "expected": "experience", "boundary": true, "alternates": [], "unattainable": true, "note": "实为待办/承诺。四张网络没有对应类别——schema 缺口（tier 里的 T3 才是待办的归属）。"},
+
+    {"id": "N13", "split": "dev", "text": "我觉得方案B更好，虽然它实现更慢。", "expected": "opinion", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N14", "split": "dev", "text": "我更喜欢用 4 空格缩进。", "expected": "opinion", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N15", "split": "dev", "text": "我不喜欢在周末处理发布。", "expected": "opinion", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N16", "split": "dev", "text": "倾向于把配置放在环境变量里。", "expected": "opinion", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N17", "split": "dev", "text": "以后都用 pnpm，不用 npm。", "expected": "opinion", "boundary": false, "alternates": [], "unattainable": false, "note": "偏好表述，但不含任何观点关键词。"},
+    {"id": "N18", "split": "dev", "text": "我建议先做数据迁移再做切流。", "expected": "opinion", "boundary": true, "alternates": ["experience"], "unattainable": false, "note": "建议属于主观主张；但它同时是一条做法，也可算 experience。"},
+
+    {"id": "N19", "split": "dev", "text": "嗯，好的，谢谢！", "expected": "observation", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N20", "split": "dev", "text": "今天开会开到六点。", "expected": "observation", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N21", "split": "dev", "text": "刚看到线上延迟有点抖动。", "expected": "observation", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N22", "split": "dev", "text": "……", "expected": "observation", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N23", "split": "dev", "text": "收到，我先看一下。", "expected": "observation", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "N24", "split": "dev", "text": "这个报错今天出现过两次，暂时没影响。", "expected": "observation", "boundary": true, "alternates": ["experience"], "unattainable": false, "note": "一次性现象；若反复出现则会升级为 experience。"},
+
+    {"id": "H01", "split": "holdout", "text": "缓存集群是 Redis 7.2，最大内存 32G。", "expected": "world", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H02", "split": "holdout", "text": "测试域名是 api.test.internal，端口 8443。", "expected": "world", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H03", "split": "holdout", "text": "发票金额是 8600 元。", "expected": "world", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H04", "split": "holdout", "text": "客户联系人邮箱是 zhang@xinghai.com。", "expected": "world", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H05", "split": "holdout", "text": "集群一共 12 个节点。", "expected": "world", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H06", "split": "holdout", "text": "昨天的错误率是 0.3%。", "expected": "world", "boundary": true, "alternates": ["observation"], "unattainable": false, "note": "可测客观量，但属时段现象。"},
+
+    {"id": "H07", "split": "holdout", "text": "最后决定用灰度发布，避免一次性切流。", "expected": "experience", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H08", "split": "holdout", "text": "以前踩过这个坑，所以这次先做压测。", "expected": "experience", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H09", "split": "holdout", "text": "我们的做法是先写测试再改代码。", "expected": "experience", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H10", "split": "holdout", "text": "回滚方案是先切流量再停服务。", "expected": "experience", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H11", "split": "holdout", "text": "这个模块不要用同步 IO。", "expected": "experience", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H12", "split": "holdout", "text": "李四需要在周五前完成联调。", "expected": "experience", "boundary": true, "alternates": [], "unattainable": true, "note": "待办/承诺，四张网络装不下——与 N12 同类的 schema 缺口。"},
+
+    {"id": "H13", "split": "holdout", "text": "我觉得这个方案风险太高。", "expected": "opinion", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H14", "split": "holdout", "text": "我更喜欢把配置写在文件里。", "expected": "opinion", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H15", "split": "holdout", "text": "我不太喜欢频繁改接口。", "expected": "opinion", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H16", "split": "holdout", "text": "宁愿多花两天也不要留技术债。", "expected": "opinion", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H17", "split": "holdout", "text": "我希望默认开启缓存。", "expected": "opinion", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H18", "split": "holdout", "text": "这个设计挺优雅的。", "expected": "opinion", "boundary": false, "alternates": [], "unattainable": false, "note": "语义明确，但**不含任何观点标记词**——用于区分「规则弱」与「schema 难」。"},
+
+    {"id": "H19", "split": "holdout", "text": "好的，我知道了。", "expected": "observation", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H20", "split": "holdout", "text": "辛苦了，谢谢！", "expected": "observation", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H21", "split": "holdout", "text": "刚才页面刷新了一下。", "expected": "observation", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H22", "split": "holdout", "text": "早上开会的时候提到过。", "expected": "observation", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H23", "split": "holdout", "text": "这个报错偶发，先记一下。", "expected": "observation", "boundary": false, "alternates": [], "unattainable": false, "note": ""},
+    {"id": "H24", "split": "holdout", "text": "这会儿网络有点慢。", "expected": "observation", "boundary": true, "alternates": ["world"], "unattainable": false, "note": "一次性现象，但也可读成对系统状态的客观描述。"}
+  ]
+}

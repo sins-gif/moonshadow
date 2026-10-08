@@ -1,0 +1,14 @@
+{
+  "id": "21-similar-relevance-newer-wins",
+  "needs_fresh": true,
+  "note": "边界用例（相关性相近）：两条 T5 卡相似度几乎相同（0.72 对 0.74，旧卡略高），卡龄差距明显。原则(c)：相关性相近时较新者优先。刻意让旧卡的相似度**略高**，以检验判定不由单纯的相似度大小决定。",
+  "query": {
+    "text": "缓存淘汰策略用的哪个？",
+    "entities": ["缓存"]
+  },
+  "candidates": [
+    {"id": "new-policy", "tier": "T5", "importance": 4, "age_days": 2, "cos": 0.72, "entities": ["缓存"], "task_hit": false},
+    {"id": "old-policy", "tier": "T5", "importance": 4, "age_days": 28, "cos": 0.74, "entities": ["缓存"], "task_hit": false}
+  ],
+  "expect_order": ["new-policy", "old-policy"]
+}

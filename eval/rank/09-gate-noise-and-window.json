@@ -1,0 +1,20 @@
+{
+  "id": "09-gate-noise-and-window",
+  "intent": "task",
+  "note": "硬门用例：正例两条正常参与排序；负例分别给出三种被挡掉的理由——层级规则（T8 需显式回溯）、卡龄窗口（T4 超出 30 天）、分数（卡龄在窗内但相似度极低）。只有 reason=score 的负例参与 θ 标定。**场景重写（P0）**：old-quote 原为 120 天，超出 T5 的 30 天窗口；改为 28 天（约两个半衰期）。注意 `stale-out-of-window` 是**正确的窗口负例**，保持不变。",
+  "query": {
+    "text": "张三的报价给到了吗？",
+    "entities": ["张三"]
+  },
+  "candidates": [
+    {"id": "open-todo", "tier": "T3", "importance": 6, "age_days": 12, "cos": 0.90, "entities": ["张三"], "task_hit": true},
+    {"id": "old-quote", "tier": "T5", "importance": 3, "age_days": 28, "cos": 0.70, "entities": ["张三"], "task_hit": false}
+  ],
+  "exclude": [
+    {"id": "noise-greeting", "reason": "tier", "tier": "T8", "importance": 1, "age_days": 0.1, "cos": 0.50, "entities": [], "task_hit": false},
+    {"id": "stale-out-of-window", "reason": "window", "tier": "T4", "importance": 7, "age_days": 200, "cos": 0.80, "entities": ["张三"], "task_hit": false},
+    {"id": "weak-t3", "reason": "score", "tier": "T3", "importance": 2, "age_days": 10, "cos": 0.15, "entities": [], "task_hit": false},
+    {"id": "weak-t6", "reason": "score", "tier": "T6", "importance": 1, "age_days": 2, "cos": 0.10, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["open-todo", "old-quote"]
+}

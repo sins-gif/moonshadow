@@ -1,0 +1,14 @@
+{
+  "id": "H09-status-but-huge-gap",
+  "needs_fresh": true,
+  "note": "原则(a) 在显式状态提问下依然成立：即便问的是「现在」，一条几乎无关的新卡也不该压过高度相关的旧事实。用于检验「状态类就该大幅压低 floor」这个做法的边界。",
+  "query": {
+    "text": "现在生产库的字符集是什么？",
+    "entities": ["字符集"]
+  },
+  "candidates": [
+    {"id": "charset-fact", "tier": "T2", "importance": 8, "age_days": 300, "cos": 0.95, "entities": ["字符集"], "task_hit": false},
+    {"id": "recent-unrelated", "tier": "T6", "importance": 2, "age_days": 0.2, "cos": 0.20, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["charset-fact", "recent-unrelated"]
+}

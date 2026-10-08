@@ -1,0 +1,14 @@
+{
+  "id": "07-historical-with-status-word",
+  "intent": "historical",
+  "note": "对抗用例（误判方向）：措辞里同时有状态类词「最近」和历史类词「当初」，实际是历史提问。敏感度启发式会给 0.5，从而误判为状态类。排序预期仍应正确——它检验的是「误判是否必然导致排错」。",
+  "query": {
+    "text": "最近这次重构当初是谁决定的？",
+    "entities": ["重构"]
+  },
+  "candidates": [
+    {"id": "stale-decision", "tier": "T2", "importance": 8, "age_days": 300, "cos": 0.90, "entities": ["重构"], "task_hit": false},
+    {"id": "fresh-chat", "tier": "T5", "importance": 2, "age_days": 0.1, "cos": 0.50, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["stale-decision", "fresh-chat"]
+}

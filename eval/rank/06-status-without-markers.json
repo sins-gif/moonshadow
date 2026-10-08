@@ -1,0 +1,14 @@
+{
+  "id": "06-status-without-markers",
+  "intent": "status",
+  "note": "oracle 对照用例：意图确实是「当前状态」，但措辞里没有任何状态标记（口语里很常见）。**场景重写（P0）**：old-strong 原为 T4/45 天，超出 T4 的 30 天窗口；T4 顶到窗口上界也只能衰减到 81%，无法表达「陈旧」，故改判为 T5/29 天。期望顺序不变。",
+  "query": {
+    "text": "部署到哪个环境了？",
+    "entities": ["部署"]
+  },
+  "candidates": [
+    {"id": "old-strong", "tier": "T5", "importance": 6, "age_days": 29, "cos": 0.90, "entities": ["部署"], "task_hit": false},
+    {"id": "new-weak", "tier": "T5", "importance": 3, "age_days": 0.2, "cos": 0.55, "entities": ["部署"], "task_hit": false}
+  ],
+  "expect_order": ["new-weak", "old-strong"]
+}

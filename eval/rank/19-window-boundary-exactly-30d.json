@@ -1,0 +1,14 @@
+{
+  "id": "19-window-boundary-exactly-30d",
+  "needs_fresh": true,
+  "note": "边界用例：一条 T5 卡恰好 30 天（窗口上界，定义 6 为 Δ ≤ 30，故应被放行）。原始原则(c)：两者相关性完全相同、同层级，只有卡龄不同 ⇒ 较新者优先。用途是钉住窗口的**闭区间**语义。",
+  "query": {
+    "text": "限流阈值是多少？",
+    "entities": ["限流"]
+  },
+  "candidates": [
+    {"id": "fresh-limit", "tier": "T5", "importance": 5, "age_days": 0.5, "cos": 0.75, "entities": ["限流"], "task_hit": false},
+    {"id": "edge-limit", "tier": "T5", "importance": 5, "age_days": 30.0, "cos": 0.75, "entities": ["限流"], "task_hit": false}
+  ],
+  "expect_order": ["fresh-limit", "edge-limit"]
+}

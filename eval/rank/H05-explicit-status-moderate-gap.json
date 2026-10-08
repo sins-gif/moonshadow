@@ -1,0 +1,14 @@
+{
+  "id": "H05-explicit-status-moderate-gap",
+  "needs_fresh": true,
+  "note": "原则(b)放宽：显式问「目前」，较新者应压过相似度更高但已过期的卡。**场景重写（P0）**：old-strong 原为 T4/40 天，超出 T4 的 30 天窗口；改判为 T5/29 天（约两个半衰期）以真正表达陈旧。**本文件已被修改**：其在此前留出验证中的效力不再适用于当前版本。",
+  "query": {
+    "text": "目前线上跑的是哪个版本？",
+    "entities": ["版本"]
+  },
+  "candidates": [
+    {"id": "old-strong", "tier": "T5", "importance": 7, "age_days": 29, "cos": 0.92, "entities": ["版本"], "task_hit": false},
+    {"id": "new-moderate", "tier": "T5", "importance": 4, "age_days": 0.5, "cos": 0.70, "entities": ["版本"], "task_hit": false}
+  ],
+  "expect_order": ["new-moderate", "old-strong"]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "03-task-continuation",
+  "intent": "task",
+  "note": "问「张三的报价给到了吗」：命中实体且未完成的事项必须排在前面。这里故意放一条新鲜但几乎无关的卡，用来检验「新鲜度是否会压过实体相关性」——这是加性权重最可能失手的地方。**场景重写（P0）**：old-quote 原为 120 天，超出 T5 的 30 天窗口；改为 28 天——对半衰期 14 天而言约两个半衰期，仍属真正陈旧。层级与期望顺序不变。",
+  "query": {
+    "text": "张三的报价给到了吗？",
+    "entities": ["张三"]
+  },
+  "candidates": [
+    {"id": "open-todo", "tier": "T3", "importance": 6, "age_days": 12, "cos": 0.90, "entities": ["张三"], "task_hit": true},
+    {"id": "old-quote", "tier": "T5", "importance": 3, "age_days": 28, "cos": 0.70, "entities": ["张三"], "task_hit": false},
+    {"id": "unrelated-fresh", "tier": "T6", "importance": 2, "age_days": 2, "cos": 0.25, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["open-todo", "old-quote", "unrelated-fresh"]
+}

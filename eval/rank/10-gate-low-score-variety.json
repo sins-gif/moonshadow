@@ -1,0 +1,18 @@
+{
+  "id": "10-gate-low-score-variety",
+  "intent": "task",
+  "note": "给 θ 与 θ_high 两组都补上「窗内但低分」的负例。第 09 号只提供了 T3/T6 两个负例，样本太少；标定区间的可信度直接取决于负例覆盖了多少层级。",
+  "query": {
+    "text": "部署脚本在哪？",
+    "entities": ["部署脚本"]
+  },
+  "candidates": [
+    {"id": "doc-card", "tier": "T6", "importance": 4, "age_days": 3, "cos": 0.75, "entities": ["部署脚本"], "task_hit": false}
+  ],
+  "exclude": [
+    {"id": "weak-t6-b", "reason": "score", "tier": "T6", "importance": 1, "age_days": 5, "cos": 0.20, "entities": [], "task_hit": false},
+    {"id": "weak-t2", "reason": "score", "tier": "T2", "importance": 1, "age_days": 40, "cos": 0.15, "entities": [], "task_hit": false},
+    {"id": "weak-t5", "reason": "score", "tier": "T5", "importance": 1, "age_days": 3, "cos": 0.18, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["doc-card"]
+}

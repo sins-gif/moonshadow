@@ -1,0 +1,15 @@
+{
+  "id": "17-explicit-recall-admits-t8",
+  "needs_fresh": false,
+  "explicit_recall": true,
+  "note": "覆盖 T8 零正例（正例侧）。原则(e)：显式回溯请求下 T8 允许进入候选集，但**不自动置顶**——排序仍按分数。转述卡（T5，30 天）因相关性更高而排在原话卡（T8，2 天）之前：T8 的半衰期只有 1 天，2 天卡龄已衰减一半。这条检验「允许进入」与「优先展示」是两件事。",
+  "query": {
+    "text": "把当时那句原话找出来",
+    "entities": []
+  },
+  "candidates": [
+    {"id": "paraphrase", "tier": "T5", "importance": 3, "age_days": 30, "cos": 0.72, "entities": [], "task_hit": false},
+    {"id": "original-quote", "tier": "T8", "importance": 1, "age_days": 2, "cos": 0.78, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["paraphrase", "original-quote"]
+}

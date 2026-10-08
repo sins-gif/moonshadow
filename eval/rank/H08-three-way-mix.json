@@ -1,0 +1,15 @@
+{
+  "id": "H08-three-way-mix",
+  "needs_fresh": false,
+  "note": "原则(a)+(b) 同时作用：高相关中等卡龄的配置文档 > 中等相关但很旧的手册 > 新鲜但无关的闲聊。两条边分别对应中等差距（时间决定）与大差距（相关性决定）。",
+  "query": {
+    "text": "数据库连接池配多大？",
+    "entities": ["连接池"]
+  },
+  "candidates": [
+    {"id": "config-doc", "tier": "T4", "importance": 8, "age_days": 18, "cos": 0.90, "entities": ["连接池"], "task_hit": false},
+    {"id": "manual-old", "tier": "T2", "importance": 7, "age_days": 200, "cos": 0.70, "entities": ["连接池"], "task_hit": false},
+    {"id": "chat-fresh", "tier": "T5", "importance": 1, "age_days": 0.1, "cos": 0.25, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["config-doc", "manual-old", "chat-fresh"]
+}

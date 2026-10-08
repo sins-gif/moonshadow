@@ -1,0 +1,76 @@
+{
+  "seed": 20260601,
+  "fraction": 0.3,
+  "dev": [
+    "02-status-query",
+    "04-same-relevance-different-age",
+    "05-status-stale-strong",
+    "06-status-without-markers",
+    "07-historical-with-status-word",
+    "09-gate-noise-and-window",
+    "10-gate-low-score-variety",
+    "11-preference-topic",
+    "12-identity-t0-never-decays",
+    "13-hard-constraint-beats-fresh-tip",
+    "14-recent-draft-vs-older-fact",
+    "15-stale-draft-is-window-negative",
+    "16-chitchat-excluded-by-tier",
+    "19-window-boundary-exactly-30d",
+    "20-group-internal-halflife-difference",
+    "H01-large-gap-fresh-noise",
+    "H02-moderate-gap-much-newer",
+    "H03-equal-relevance-different-age",
+    "H04-historical-explicit-large-gap",
+    "H05-explicit-status-moderate-gap",
+    "H06-status-equal-relevance",
+    "H08-three-way-mix"
+  ],
+  "holdout": [
+    {
+      "id": "01-historical-decision",
+      "file": "01-historical-decision.json",
+      "sha256": "d24acaaf0bc18bd89a38621c9add5465580215ef8f78aa35b0f6efb8df58afa3"
+    },
+    {
+      "id": "03-task-continuation",
+      "file": "03-task-continuation.json",
+      "sha256": "a63892a1320a5c3bb89d1d2a902d3a1ef2ef33ce8527758d73e4b48858074d83"
+    },
+    {
+      "id": "08-status-weak-signal",
+      "file": "08-status-weak-signal.json",
+      "sha256": "83520b5e1588b240e2ad14ea239fe27fe528b6d2ccd98a1182ca117dc7803777"
+    },
+    {
+      "id": "17-explicit-recall-admits-t8",
+      "file": "17-explicit-recall-admits-t8.json",
+      "sha256": "6c755dcd0c42fdb8f2f32ca0d8c6266af1735f8676641dcdcfa701419efa38f7"
+    },
+    {
+      "id": "18-noise-never-competes",
+      "file": "18-noise-never-competes.json",
+      "sha256": "57ada709bea3d916ce5d52607681fe05c8d92d0285ce30a82588d9e096e152de"
+    },
+    {
+      "id": "21-similar-relevance-newer-wins",
+      "file": "21-similar-relevance-newer-wins.json",
+      "sha256": "8a30e234b96cc108b1419bd273813f11f8ed9f7822ec4ed4bf9be4062f06b9e0"
+    },
+    {
+      "id": "H07-progress-fresh-irrelevant-must-not-win",
+      "file": "H07-progress-fresh-irrelevant-must-not-win.json",
+      "sha256": "8e24d742b320f9453dc65e2e0a590111906a9e1b4657b34476546ff607ead760"
+    },
+    {
+      "id": "H09-status-but-huge-gap",
+      "file": "H09-status-but-huge-gap.json",
+      "sha256": "59becabfbd192a5ef2f67478eeaf62347a5cbcf1cac0c222ff0a73b4ebfe0acb"
+    },
+    {
+      "id": "H10-preference-governs-answer",
+      "file": "H10-preference-governs-answer.json",
+      "sha256": "002155f699b2ae3b615c9ecfe9043187a366d46771d0adb55f4311dc5f12362d"
+    }
+  ],
+  "note": "留出集在本次冻结后不得再修改。改动会被 tools/run_split_integrity.py 与 tests/test_split_integrity.py 判为违规。"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "02-status-query",
+  "intent": "status",
+  "note": "问「现在定了吗」：两条都与预算相关且相似度接近，此时新鲜度应当决定先后。用于观察「仅相关性 + 时间破同分」是否会失手。",
+  "query": {
+    "text": "现在的预算定了吗？",
+    "entities": ["预算"]
+  },
+  "candidates": [
+    {"id": "fresh-answer", "tier": "T5", "importance": 4, "age_days": 1, "cos": 0.80, "entities": ["预算"], "task_hit": false},
+    {"id": "old-decision", "tier": "T2", "importance": 8, "age_days": 200, "cos": 0.85, "entities": ["预算"], "task_hit": false}
+  ],
+  "expect_order": ["fresh-answer", "old-decision"]
+}

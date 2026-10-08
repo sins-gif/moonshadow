@@ -1,0 +1,14 @@
+{
+  "id": "H06-status-equal-relevance",
+  "needs_fresh": true,
+  "note": "原则(c)放宽：显式问「当前」，两条相关性完全相同，只有卡龄不同。与 H03 的区别是它带显式时效标记，用于检验「意图加强项是否还有增量」——若默认 floor 已能处理，加强项就是多余的。",
+  "query": {
+    "text": "当前的限额是多少？",
+    "entities": ["限额"]
+  },
+  "candidates": [
+    {"id": "old-limit", "tier": "T5", "importance": 5, "age_days": 20, "cos": 0.75, "entities": ["限额"], "task_hit": false},
+    {"id": "new-limit", "tier": "T5", "importance": 5, "age_days": 0.5, "cos": 0.75, "entities": ["限额"], "task_hit": false}
+  ],
+  "expect_order": ["new-limit", "old-limit"]
+}

@@ -1,0 +1,14 @@
+{
+  "id": "13-hard-constraint-beats-fresh-tip",
+  "needs_fresh": false,
+  "note": "覆盖 T0 零正例（第二条）。原则(a)的强化：当两卡相关性差距不大时，T0 因不衰减而保持领先。硬约束（600 天前立的）应排在新鲜的操作提示之前。",
+  "query": {
+    "text": "部署时要注意什么？",
+    "entities": ["部署"]
+  },
+  "candidates": [
+    {"id": "hard-constraint", "tier": "T0", "importance": 10, "age_days": 600, "cos": 0.70, "entities": ["部署"], "task_hit": false},
+    {"id": "fresh-tip", "tier": "T5", "importance": 4, "age_days": 1, "cos": 0.82, "entities": ["部署"], "task_hit": false}
+  ],
+  "expect_order": ["hard-constraint", "fresh-tip"]
+}

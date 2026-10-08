@@ -1,0 +1,16 @@
+{
+  "id": "16-chitchat-excluded-by-tier",
+  "needs_fresh": false,
+  "note": "覆盖 T8 零正例（负例侧）。原则(e)：T8 仅在显式回溯时进入，与分数无关。这条特意给寒暄卡较高的相似度（0.60）与新近度（0.1 天），用来检验**挡住它的是层级规则而不是分数**。",
+  "query": {
+    "text": "上周那个改动的结论是什么？",
+    "entities": ["改动"]
+  },
+  "candidates": [
+    {"id": "decision", "tier": "T2", "importance": 7, "age_days": 10, "cos": 0.85, "entities": ["改动"], "task_hit": false}
+  ],
+  "exclude": [
+    {"id": "chitchat", "reason": "tier", "tier": "T8", "importance": 1, "age_days": 0.1, "cos": 0.60, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["decision"]
+}

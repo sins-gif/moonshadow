@@ -1,0 +1,14 @@
+{
+  "id": "H03-equal-relevance-different-age",
+  "needs_fresh": true,
+  "note": "原则(c)：相关性几乎相同时，较新者优先。控制组性质。**场景重写（P0）**：older-same 原为 40 天，超出 T5 的 30 天窗口；改为 28 天（约两个半衰期）。**本文件已被修改**：其在此前留出验证中的效力不再适用于当前版本。",
+  "query": {
+    "text": "发布流程有几步？",
+    "entities": ["发布流程"]
+  },
+  "candidates": [
+    {"id": "older-same", "tier": "T5", "importance": 5, "age_days": 28, "cos": 0.70, "entities": ["发布流程"], "task_hit": false},
+    {"id": "newer-same", "tier": "T5", "importance": 5, "age_days": 0.5, "cos": 0.70, "entities": ["发布流程"], "task_hit": false}
+  ],
+  "expect_order": ["newer-same", "older-same"]
+}

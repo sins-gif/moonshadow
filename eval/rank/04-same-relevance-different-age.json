@@ -1,0 +1,14 @@
+{
+  "id": "04-same-relevance-different-age",
+  "intent": "task",
+  "note": "控制组：两条卡除了卡龄以外完全一样。此时时间必须说了算——如果某个方案在这里排错，说明它不是「时间权重小」，而是「时间失效」。**场景重写（P0）**：older-same 原为 90 天，超出 T5 的 30 天窗口；改为 28 天（约两个半衰期），仍属陈旧。",
+  "query": {
+    "text": "接口怎么调用？",
+    "entities": ["API"]
+  },
+  "candidates": [
+    {"id": "newer-same", "tier": "T5", "importance": 5, "age_days": 0.5, "cos": 0.70, "entities": ["API"], "task_hit": false},
+    {"id": "older-same", "tier": "T5", "importance": 5, "age_days": 28, "cos": 0.70, "entities": ["API"], "task_hit": false}
+  ],
+  "expect_order": ["newer-same", "older-same"]
+}

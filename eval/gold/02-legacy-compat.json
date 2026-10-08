@@ -1,0 +1,13 @@
+{
+  "id": "02-legacy-compat",
+  "day": "2026-10-02",
+  "note": "考 URL 与代码片段这类「一改就出错」的字段，以及否定式硬约束的 T0 判定。",
+  "messages": [
+    "必须兼容旧版 API，除非客户端显式升级。",
+    "重构时不要删除 `legacy_adapter.py`，迁移步骤见 https://docs.example.com/migrate"
+  ],
+  "expected": {
+    "key_fields": ["https://docs.example.com/migrate", "`legacy_adapter.py`"],
+    "tiers_present": ["T0"]
+  }
+}

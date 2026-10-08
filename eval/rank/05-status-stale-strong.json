@@ -1,0 +1,14 @@
+{
+  "id": "05-status-stale-strong",
+  "intent": "status",
+  "note": "陈旧但高度相关的卡 vs 新鲜但只是沾边的卡，状态类查询应以新鲜者为准。**场景重写（P0）**：old-strong 原为 T4/45 天，超出 T4 的 30 天窗口。关键观察是——T4 半衰期 30 天，即使顶到窗口上界也**只能衰减到 81%，无法表达「陈旧」**；因此改判为 T5（半衰期 14 天）/29 天，对半衰期而言约两个半衰期，真正陈旧。期望顺序不变。",
+  "query": {
+    "text": "目前部署到哪个环境了？",
+    "entities": ["部署"]
+  },
+  "candidates": [
+    {"id": "old-strong", "tier": "T5", "importance": 6, "age_days": 29, "cos": 0.90, "entities": ["部署"], "task_hit": false},
+    {"id": "new-weak", "tier": "T5", "importance": 3, "age_days": 0.2, "cos": 0.55, "entities": ["部署"], "task_hit": false}
+  ],
+  "expect_order": ["new-weak", "old-strong"]
+}

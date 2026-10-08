@@ -1,0 +1,14 @@
+{
+  "id": "14-recent-draft-vs-older-fact",
+  "needs_fresh": true,
+  "note": "覆盖 T7 零正例（窗口内）。原则(b)：相关性差距中等时较新者优先。T7 半衰期极短（3 天），5 天卡龄已衰减到约三成，因此这条同时检验「短半衰期是否吃掉了它的新鲜优势」——按公式它的修正系数仍略高于 25 天卡龄的 T5。",
+  "query": {
+    "text": "上次讨论的接口草案定了吗？",
+    "entities": ["接口"]
+  },
+  "candidates": [
+    {"id": "draft-t7", "tier": "T7", "importance": 3, "age_days": 5, "cos": 0.80, "entities": ["接口"], "task_hit": false},
+    {"id": "older-note-t5", "tier": "T5", "importance": 4, "age_days": 25, "cos": 0.70, "entities": ["接口"], "task_hit": false}
+  ],
+  "expect_order": ["draft-t7", "older-note-t5"]
+}

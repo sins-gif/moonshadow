@@ -1,0 +1,14 @@
+{
+  "id": "11-preference-topic",
+  "intent": "preference",
+  "note": "补上 preference 意图（此前缺失）。刻意让偏好卡**既更相关又更新**，因此它排第一没有争议——这条用例的作用是覆盖意图类别与确认长期偏好不被时间修正误伤，而不是检验「偏好 vs 新鲜度」的排序（后者本身没有公认答案，因为 T1 是硬门无条件带入的）。",
+  "query": {
+    "text": "我平时喜欢怎么组织配置文件？",
+    "entities": ["配置文件"]
+  },
+  "candidates": [
+    {"id": "style-preference", "tier": "T1", "importance": 9, "age_days": 5, "cos": 0.80, "entities": ["配置文件"], "task_hit": false},
+    {"id": "generic-note", "tier": "T5", "importance": 3, "age_days": 1, "cos": 0.30, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["style-preference", "generic-note"]
+}

@@ -1,0 +1,8 @@
+# 禁止 Git 做任何换行转换（`-text`）。
+#
+# 原因：`eval/split-manifest.json` 记录的是留出集文件**工作区字节**的 SHA-256，
+# 由 `tools/run_split_integrity.py` 与 `tests/test_split_integrity.py` 强制。
+# 若 Git 在 checkout 时把 LF 转成 CRLF，全部留出集文件的哈希都会变，
+# 冻结校验会在新克隆的仓库上报「留出集已被修改」——而实际上一个字节都没改。
+# 所以这里必须关掉 EOL 转换，保证「仓库里的字节」= 「校验用的字节」。
+* -text

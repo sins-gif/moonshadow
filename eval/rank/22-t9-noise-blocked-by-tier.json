@@ -1,0 +1,16 @@
+{
+  "id": "22-t9-noise-blocked-by-tier",
+  "needs_fresh": false,
+  "note": "覆盖 T9 的负例侧（v1.2 决策 4）。原则(e)：T9 是会话级瞬时态，只在显式回溯请求时才进入候选项，**与分数无关**。这张 T9 卡故意给很高的相似度（0.93）与极新的卡龄（0.05 天 ≈ 1.2 小时），用来检验挡住它的是**层级规则**而不是分数。它按设计不承担参数约束（`f`/`θ` 的约束产率见 run_batch_audit.py），因此不要指望它移动可行区。",
+  "query": {
+    "text": "服务部署在哪个区域？",
+    "entities": ["区域"]
+  },
+  "candidates": [
+    {"id": "region-decision", "tier": "T2", "importance": 7, "age_days": 20, "cos": 0.85, "entities": ["区域"], "task_hit": false}
+  ],
+  "exclude": [
+    {"id": "t9-noise", "reason": "tier", "tier": "T9", "importance": 1, "age_days": 0.05, "cos": 0.93, "entities": [], "task_hit": false}
+  ],
+  "expect_order": ["region-decision"]
+}

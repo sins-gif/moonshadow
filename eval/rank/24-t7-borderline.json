@@ -1,0 +1,14 @@
+{
+  "id": "24-t7-borderline",
+  "needs_fresh": true,
+  "note": "原则 (a)：相关性差距足够大时相关性胜出——这正是定理 3 的判定边界（`m_B/m_A > r_A/r_B` 才允许时间翻盘）。T6 卡更旧（Δ=4）但相关性明显更高（s=0.85），T7 卡极新（Δ=1）但相关性更低（s=0.68）；期望**旧而更相关**的一张胜出。数值按 R1 刻意贴近边界（实测相邻分差 0.0108），因此这条从**下侧**约束采纳下限（f > 0.500）：下限取得太小，时间话语权过大，T7 就会翻盘。",
+  "query": {
+    "text": "缓存层现在用哪个方案？",
+    "entities": ["缓存层"]
+  },
+  "candidates": [
+    {"id": "older-more-relevant", "tier": "T6", "importance": 5, "age_days": 4, "cos": 0.85, "entities": ["缓存层"], "task_hit": false},
+    {"id": "newer-less-relevant", "tier": "T7", "importance": 5, "age_days": 1, "cos": 0.68, "entities": ["缓存层"], "task_hit": false}
+  ],
+  "expect_order": ["older-more-relevant", "newer-less-relevant"]
+}
