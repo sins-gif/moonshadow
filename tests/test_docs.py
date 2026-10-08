@@ -162,6 +162,32 @@ class DocGuardTest(unittest.TestCase):
             "（新增文件后请同步该行；口径见本测试的说明）",
         )
 
+    def test_documented_case_counts_match_the_case_sets(self) -> None:
+        """文档「规模」行里的四个用例集条数必须与磁盘一致。
+
+        加这条是因为同一类漂移刚发生过：金标准集从 3 条扩到 25 条时，
+        「规模」行里的 `3（抽取金标准）` 没有任何检查会拦——文件数有守卫，
+        条数没有。四个集合的条数分别来自三个目录与一个多用例 JSON。
+        """
+        import json
+
+        dev = len(list((ROOT / "eval" / "rank").glob("*.json")))
+        holdout = len(list((ROOT / "eval" / "holdout").glob("*.json")))
+        network_payload = json.loads(
+            (ROOT / "eval" / "network" / "cases.json").read_text(encoding="utf-8")
+        )
+        network = len(network_payload["cases"])
+        gold = len(list((ROOT / "eval" / "gold").glob("*.json")))
+
+        expected = f"用例集 {dev}（开发）+ {holdout}（留出）+ {network}（网络）+ {gold}（抽取金标准"
+        summary = (DOCS / "v1.2-summary.md").read_text(encoding="utf-8")
+        self.assertIn(
+            expected, summary,
+            f"docs/v1.2-summary.md 的「规模」行与用例集现状不一致：\n"
+            f"  实际应为：{expected}…\n"
+            "（新增或删除用例后请同步该行）",
+        )
+
     def test_documented_test_count_matches_reality(self) -> None:
         """文档里写的 `Ran N tests` 必须等于真实条数——让这个数字自维护。
 
