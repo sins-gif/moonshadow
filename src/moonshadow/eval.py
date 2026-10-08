@@ -62,7 +62,13 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
 from .clock import FixedClock, parse_ts
-from .compress import BaselineExtractor, Extractor, compile_session
+from .compress import (
+    SENTENCE_SPLIT_RE,
+    BaselineExtractor,
+    Extractor,
+    classify_tier,
+    compile_session,
+)
 from .pack import estimate_tokens
 from .store import Store
 from .tiers import TIER_ORDER
@@ -391,6 +397,227 @@ def run_eval(
     return EvalReport(
         results=[run_case(case, engine) for case in selected],
         min_recall=min_recall,
+    )
+
+
+# --------------------------------------------------------------------------- 只读探针
+#
+# 下面这一节**不是评测口径**：它不参与 `run_eval` 的关卡判定，也不进 `summary()`。
+# 它是 Phase 1 开工前的一次性探针，回答一个问题：把「一条消息一张卡」换成「按信息项归并」，
+# 卡数与 token 的理论下界各是多少。Phase 1 的 I/O 契约定下来之后可以整节删掉。
+
+
+@dataclass
+class MergeHeadroomRow:
+    """某一层级上「归并能省多少」的读数。所有列都来自已定义的口径，不引入新概念。"""
+
+    tier: str
+    cards_now: int = 0
+    cards_bound: int = 0
+    raw_tokens: int = 0
+    card_tokens_now: int = 0
+    #: 口径 A：**并集**——每个信息项取「包含它的最长句子」中 token 最多的那一次，
+    #: 再把所有信息项的载体句子取并集。这是「原文里最短一段仍逐字包含全部信息项的文字」。
+    item_union_tokens: int = 0
+    #: 口径 A'：用户定义的字面 **求和**。共享同一句子的多个信息项会被重复计入，
+    #: 因而它**不是下界**（会高于真实下界）。列出来是为了让差额可见。
+    item_sum_tokens: int = 0
+    #: 口径 B：**只去重、不抽象**——同一句话只写一次（跨消息与跨字段的逐字重复都去掉），
+    #: 但保留全部文字。它衡量「归并 + 去重」在完全不丢内容的前提下能走多远。
+    dedup_tokens: int = 0
+
+    @property
+    def ratio_now(self) -> float:
+        return self.raw_tokens / self.card_tokens_now if self.card_tokens_now else 0.0
+
+    @property
+    def ratio_items(self) -> float:
+        return self.raw_tokens / self.item_union_tokens if self.item_union_tokens else 0.0
+
+    @property
+    def ratio_dedup(self) -> float:
+        return self.raw_tokens / self.dedup_tokens if self.dedup_tokens else 0.0
+
+
+@dataclass
+class MergeHeadroom:
+    rows: list[MergeHeadroomRow]
+    total: MergeHeadroomRow
+    cases: int = 0
+    #: 出现在两个及以上层级的信息项数（分层表按层级各计一次，故分层之和大于总数）。
+    shared_items: int = 0
+    #: 找不到承载句子的信息项数（跨句边界等）。>0 时口径 A 略偏小，必须一并声明。
+    items_without_carrier: int = 0
+
+    def row(self, tier: str) -> MergeHeadroomRow:
+        for item in self.rows:
+            if item.tier == tier:
+                return item
+        raise KeyError(tier)
+
+    @staticmethod
+    def _ratio(value: float, denominator: int) -> str:
+        """分母为 0 时显示「—」：那是「不适用」，不是「压缩得很差」。"""
+        return f"{value:.3f}x" if denominator else "—"
+
+    def table(self) -> list[str]:
+        lines = [
+            "归并上限探针（Phase 1 开工前的只读读数；不参与关卡判定）",
+            "  口径 A  = 每个信息项各留 1 处载体句子，取并集（信息项 = HARD_PATTERNS 的日期/金额/URL/代码）",
+            "  口径 A' = 同样取载体，但按信息项逐个求和（共享句子会重复计入，**不是下界**）",
+            "  口径 B  = 只去重不抽象：同一句话只写一次，文字不丢",
+            "  合计行按 token 加权（不是逐用例均值），与分层行同口径聚合。",
+            f"  {'tier':<5}{'当前卡数':>8}{'归并下界卡数':>12}{'原文token':>11}"
+            f"{'当前压缩率':>11}{'A 压缩率':>10}{'B 压缩率':>10}",
+        ]
+        for item in [*self.rows, self.total]:
+            lines.append(
+                f"  {item.tier:<5}{item.cards_now:>8}{item.cards_bound:>12}"
+                f"{item.raw_tokens:>11,}{self._ratio(item.ratio_now, item.card_tokens_now):>11}"
+                f"{self._ratio(item.ratio_items, item.item_union_tokens):>10}"
+                f"{self._ratio(item.ratio_dedup, item.dedup_tokens):>10}"
+            )
+        union_total = sum(i.item_union_tokens for i in self.rows)
+        lines.append(
+            f"  · 口径 A' 的分层求和 token：{sum(i.item_sum_tokens for i in self.rows):,}"
+            f"（分层并集 {union_total:,}，差额 {sum(i.item_sum_tokens for i in self.rows) - union_total:,}"
+            " 就是共享句子被重复计入的部分——所以按信息项逐个求和不是下界）"
+        )
+        if self.shared_items:
+            lines.append(
+                f"  · 出现在多个层级的信息项 {self.shared_items} 个：分层表里各计一次，"
+                "故分层卡数之和大于合计卡数"
+            )
+        if self.items_without_carrier:
+            lines.append(
+                f"  · 找不到承载句子的信息项 {self.items_without_carrier} 个（跨句边界）："
+                "口径 A 因此略偏小"
+            )
+        return lines
+
+
+def merge_headroom(
+    report: EvalReport | None = None,
+    *,
+    cases: Sequence[GoldCase] | None = None,
+) -> MergeHeadroom:
+    """只读探针：把「一条消息一张卡」换成「按信息项归并」后的卡数/token 下界。
+
+    「当前」列一律**复用 `EvalReport` 的既有读数**（卡数、原文 token、卡 token），不另算一套。
+
+    - **卡数下界** = 该层级消息里出现的**不同信息项**个数（信息项 = `verify.HARD_PATTERNS`
+      抽出的日期/金额/URL/反引号代码，`normalize` 后去重）。注意它的性质：
+      一张卡可以装多个信息项，所以这个数**不是卡数的数学下界**，而是
+      「一个信息项一张卡」这个设计点上的卡数。它有用是因为当前基线是「一条消息一张卡」，
+      两个数一比就知道「按信息项归并」相对「按消息切卡」是变多还是变少；
+      它**对不含硬字段的消息（纯叙述、寒暄、噪音）没有任何说法**——
+      那些层级的下界是 0，不代表可以把它们删光。
+    - **口径 A**（token 下界）= 每个信息项取包含它的最长句子，再取这些句子的**并集**。
+      这是「最短一段仍逐字包含全部信息项的文字」。用并集而不是求和，是因为多个信息项
+      常共享同一句话，求和会把它重复计入（那样得出的数高于真实下界，不能叫下界）。
+      口径 A 假设**可以丢掉不含硬字段的句子**——那是抽象，不是归并；它的读数因此
+      同时包含「归并」和「抽象」两种效应，不能当成归并的功劳。
+    - **口径 B**（只去重不抽象）= 该层级里不同句子各写一次。它**不删任何文字**，
+      只删逐字重复。若金标准集里没有逐字重复的句子，B 恒等于原文 token，即 `1.000x`——
+      这不是测出来的，是构造出来的；它说明「归并 + 去重」在这份集合上的天花板就是 `1.000x`。
+
+    探针不写文件、不改任何状态；`cases` 只在需要自己跑基线时用。
+    """
+    base = report if report is not None else run_eval(cases=cases)
+    selected = {case.id: case for case in (list(cases) if cases is not None else load_gold())}
+
+    rows: dict[str, MergeHeadroomRow] = {
+        tier: MergeHeadroomRow(tier=tier) for tier in TIER_ORDER
+    }
+    total = MergeHeadroomRow(tier="合计")
+    shared_items = 0
+    without_carrier = 0
+
+    for result in base.results:
+        case = selected.get(result.case_id)
+        if case is None:
+            continue
+        # 「当前」列直接抄既有读数：卡数/原文/卡 token 全部按 tier 归集。
+        for tier, stat in result.tier_stats.items():
+            row = rows.setdefault(tier, MergeHeadroomRow(tier=tier))
+            row.cards_now += stat.cards
+            row.raw_tokens += stat.raw_tokens
+            row.card_tokens_now += stat.card_tokens
+        total.cards_now += result.cards
+        total.raw_tokens += result.raw_tokens
+        total.card_tokens_now += result.card_tokens
+
+        tiers = [classify_tier(text) for text in case.messages]
+        sentences: list[tuple[str, str, int]] = []  # (tier, 归一化句子, token)
+        for tier, text in zip(tiers, case.messages):
+            for sentence in SENTENCE_SPLIT_RE.split(text):
+                sentence = sentence.strip()
+                if sentence:
+                    sentences.append((tier, normalize(sentence), estimate_tokens(sentence)))
+
+        item_tiers: dict[str, set[str]] = {}
+        for tier, text in zip(tiers, case.messages):
+            for values in extract_key_fields(text).values():
+                for value in values:
+                    item_tiers.setdefault(normalize(value), set()).add(tier)
+
+        carriers: dict[str, int | None] = {}
+        for item in item_tiers:
+            best: int | None = None
+            for index, (_, normalized, tokens) in enumerate(sentences):
+                if item and item in normalized and (best is None or tokens > sentences[best][2]):
+                    best = index
+            carriers[item] = best
+            if best is None:
+                without_carrier += 1
+            if len(item_tiers[item]) >= 2:
+                shared_items += 1
+
+        # 口径 B：每个层级内部，不同句子各计一次（同句取 token 最多的那次）
+        best_sentence: dict[tuple[str, str], int] = {}
+        for tier, normalized, tokens in sentences:
+            key = (tier, normalized)
+            best_sentence[key] = max(best_sentence.get(key, 0), tokens)
+        for (tier, _), tokens in best_sentence.items():
+            rows.setdefault(tier, MergeHeadroomRow(tier=tier)).dedup_tokens += tokens
+        best_sentence_case: dict[str, int] = {}
+        for _, normalized, tokens in sentences:
+            best_sentence_case[normalized] = max(best_sentence_case.get(normalized, 0), tokens)
+        total.dedup_tokens += sum(best_sentence_case.values())
+
+        # 口径 A / A'：按层级归集信息项的载体
+        per_tier_items: dict[str, set[str]] = {}
+        for item, item_tier_set in item_tiers.items():
+            for tier in item_tier_set:
+                per_tier_items.setdefault(tier, set()).add(item)
+        for tier, items in per_tier_items.items():
+            row = rows.setdefault(tier, MergeHeadroomRow(tier=tier))
+            row.cards_bound += len(items)
+            union: set[int] = set()
+            for item in items:
+                index = carriers[item]
+                if index is None:
+                    continue
+                row.item_sum_tokens += sentences[index][2]
+                union.add(index)
+            row.item_union_tokens += sum(sentences[index][2] for index in union)
+
+        total.cards_bound += len(item_tiers)
+        case_union: set[int] = set()
+        for item in item_tiers:
+            index = carriers[item]
+            if index is None:
+                continue
+            total.item_sum_tokens += sentences[index][2]
+            case_union.add(index)
+        total.item_union_tokens += sum(sentences[index][2] for index in case_union)
+
+    return MergeHeadroom(
+        rows=[rows[tier] for tier in TIER_ORDER],
+        total=total,
+        cases=len(base.results),
+        shared_items=shared_items,
+        items_without_carrier=without_carrier,
     )
 
 
