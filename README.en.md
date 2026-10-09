@@ -241,7 +241,8 @@ moonshadow/
 ├── ddl.sql              SQLite DDL: card / claim / source / card_source / cursor / entity*
 ├── docs/                11 files: 4 current + 1 authoritative + index + idea backlog + 4 historical (see below)
 ├── src/moonshadow/      17 files / 16 modules (standard library only)
-├── tools/               13 executable commands (audits + evaluation + re-split + guards)
+├── tools/               15 executables = 14 release-verification commands + 1 Phase 2 probe
+│                        (run_llm_probe.py needs a local LLM key; it is not part of release verification)
 ├── eval/                case sets: gold 3 + rank 26 + holdout 9 (frozen) + network 48 + frozen manifest
 ├── tests/               14 test files / 239 assertions
 ├── examples/demo.py     end-to-end demo
