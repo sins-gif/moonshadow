@@ -57,6 +57,10 @@ SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？!?\n])")
 #: 当作「决策有载体」是空头支票：T8/T9 的内容按定义就是要丢掉的。
 CARRY_FORBIDDEN_TIERS: tuple[str, ...] = ("T8", "T9")
 
+#: **C6 卡内字段互斥**涉及的字段：一张卡内同一句话只能出现在其中一个里。
+#: `summary` 不在其中——它受另一条约束（不得逐字复述上述字段里的任何句子）。
+MUTUALLY_EXCLUSIVE_FIELDS: tuple[str, ...] = ("facts", "decisions", "todos", "constraints")
+
 #: 参与「卡内文本」比对的字段。**`raw_quote` 不在其中**（v1.3 决定 Q3）：
 #: 卡把原文整段抄一遍不是压缩，把它计入卡文本就等于给逐字复制发许可证——
 #: 去掉它之后压缩率才是对「抽取器有没有真的抽象」的度量。
@@ -203,6 +207,57 @@ def qualitative_sentences(text: str) -> list[tuple[str, str]]:
                 found.append((kind, sentence))
                 break
     return found
+
+
+def verify_field_mutual_exclusion(cards: Sequence[Mapping[str, Any]]) -> Report:
+    """**C6：卡内字段互斥**——同一句话只能有一个载体字段。
+
+    契约原文见 `docs/v1.3-spec.md` §2 C6：一张卡内，
+    `facts` / `decisions` / `todos` / `constraints` 四个字段**互斥**；
+    `summary` 是对该卡的整体概述，**不得逐字复述**上述任何字段里已出现的句子。
+
+    为什么必须有这条：v1.3 Phase 1 实测过——同一句话既进 `facts` 又进
+    `decisions`/`todos`/`constraints` 时，token 加权压缩率是 `0.9712x`；
+    同样的代码、同样的卡数，只把重复的那一份去掉，读数变成 `2.3311x`。
+    也就是**这一条值 `1.36x` 的压缩率**：它不是抽取器能力的天花板，是契约缺失造出来的天花板。
+
+    判定用的是**归一化后的整句**（`normalize`：去空格与逗号）。不做语义等价判断——
+    那是第二级模型校验的职责；这里只拒绝「同一句话写两遍」这种机械可判的重复。
+    """
+    report = Report()
+    violations: list[str] = []
+    for card in cards:
+        card_id = str(card.get("id", "?"))[:8]
+        owner: dict[str, str] = {}
+        for field_name in MUTUALLY_EXCLUSIVE_FIELDS:
+            values = card.get(field_name) or ()
+            if isinstance(values, str):  # 容错：单字符串也当一句
+                values = (values,)
+            for value in values:
+                key = normalize(str(value))
+                if not key:
+                    continue
+                if key in owner:
+                    where = (
+                        f"{field_name} 里写了两次"
+                        if owner[key] == field_name
+                        else f"{owner[key]} 与 {field_name} 各写一次"
+                    )
+                    violations.append(f"{card_id} 同一句在 {where} → {str(value)[:40]}")
+                else:
+                    owner[key] = field_name
+
+        summary = normalize(str(card.get("summary") or ""))
+        if summary:
+            for key, field_name in owner.items():
+                if key and key in summary:
+                    violations.append(
+                        f"{card_id} summary 逐字复述了 {field_name} 里的句子 → {key[:40]}"
+                    )
+
+    if violations:
+        report.missing["field_mutual_exclusion"] = violations
+    return report
 
 
 def verify_qualitative_retention(

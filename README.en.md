@@ -8,10 +8,12 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 |---|---|
 | **Repository** | <https://github.com/sins-gif/moonshadow> |
 | **Version** | `v1.2.0` ([code at this version](https://github.com/sins-gif/moonshadow/tree/v1.2.0) ｜ `git tag v1.2.0`) |
-| **Minimal rerun** | `python -m unittest discover -s tests` → `Ran 222 tests` + `OK` |
+| **Minimal rerun** | `python -m unittest discover -s tests` → `Ran 227 tests` + `OK` |
 
 > **This version is the data-driven parameter-convergence release**: `f = 0.5925`, `θ = θ′ = 0.3941`, default scheme multiplicative;
-> `T9` is covered on the negative side only (the gap is on record). Sealed-release reading: **all 14 tools exit `0`**.
+> `T9` is covered on the negative side only (the gap is on record). Sealed-release reading: **13 of 14 commands exit `0`** —
+> `run_eval.py` exits `1` for the rule baseline, because v1.3's C6 (intra-card field exclusivity) rejects it (751 violations measured,
+> see `docs/v1.3-spec.md` §6); a C6-conforming implementation exits `0`.
 
 - Current specification (**read this first**): **`docs/v1.2-spec.md`** ← definitions, contracts and **fixed parameter values**
 - **Documentation index / where to start**: `docs/README.md` ← authority map, reading order, maintenance rules
@@ -27,7 +29,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 - **Bounded multiplicative correction** (`q = r · m`, `m ∈ [f, 1]`) avoids the **threshold-inseparability** defect of additive fusion:
   on the same case set, additive reverses `117` pairs inside the region where multiplicative is **guaranteed** not to, while multiplicative goes out of bounds `0` times;
   additive's ranking agreement **also ties at full marks** (`1.000` vs `1.000`) — **a defect that ranking metrics cannot see, exposed by threshold calibration and the drift experiment**.
-- **222 unit assertions + 14 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
+- **227 unit assertions + 14 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
   whether negatives are really blocked by the gate, whether the holdout set has been modified, whether the assignment forms in the docs match the code — **all executable and re-runnable**.
 
 ## Project status (v1.2)
@@ -49,7 +51,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 No dependencies to install (Python 3.10+, standard library only):
 
 ```bash
-python -m unittest discover -s tests   # deterministic tests: count and status are whatever this command prints (measured for this delivery: Ran 222 tests + OK)
+python -m unittest discover -s tests   # deterministic tests: count and status are whatever this command prints (measured for this delivery: Ran 227 tests + OK)
 
 # Audits and contracts (four of them; all should report 0 violations)
 python tools/run_case_audit.py          # case age windows and T8/T9 gate preconditions
@@ -242,7 +244,7 @@ moonshadow/
 ├── src/moonshadow/      17 files / 16 modules (standard library only)
 ├── tools/               13 executable commands (audits + evaluation + re-split + guards)
 ├── eval/                case sets: gold 3 + rank 26 + holdout 9 (frozen) + network 48 + frozen manifest
-├── tests/               14 test files / 222 assertions
+├── tests/               14 test files / 227 assertions
 ├── examples/demo.py     end-to-end demo
 └── experiments/         the user's own hand computations (kept verbatim, must not be modified; see the notes in the files)
 ```
@@ -295,7 +297,7 @@ src/moonshadow/
   network_eval.py       network assignment evaluation: confusion matrix + strict/attainable dual readings
   network_rules.py      class-level vocabulary rules for the four network types (independent of tier)
   drift.py              measurement of reversal regions under parameter drift (empirical evidence that the additive scheme has no ratio bound)
-tests/                  acceptance tests for Phase 1 / 2 / 2.5 / 3 (14 test files; `Ran 222 tests` + `OK`, whatever the command prints is authoritative)
+tests/                  acceptance tests for Phase 1 / 2 / 2.5 / 3 (14 test files; `Ran 227 tests` + `OK`, whatever the command prints is authoritative)
 experiments/            the user's own hand computations (kept verbatim, must not be modified; see the notes in the files)
 examples/demo.py        end-to-end demo
 ```

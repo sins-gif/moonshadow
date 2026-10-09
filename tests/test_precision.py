@@ -20,6 +20,7 @@ from moonshadow.verify import (  # noqa: E402
     card_text,
     extract_key_fields,
     normalize,
+    verify_field_mutual_exclusion,
     verify_no_silent_loss,
     verify_qualitative_retention,
 )
@@ -213,6 +214,58 @@ class RawQuoteAndBacklinkTest(unittest.TestCase):
         """不传 `sources` 时退回旧行为——回链必须由调用方显式打开。"""
         report = verify_no_silent_loss(self.RAW, [card(summary="细节见原文。")])
         self.assertFalse(report.ok)
+
+
+class FieldMutualExclusionTest(unittest.TestCase):
+    """C6：卡内字段互斥。同一句话只能有一个载体字段；summary 不得逐字复述。
+
+    这条判据是实测逼出来的：同一句话既进 `facts` 又进 `decisions`/`todos`/`constraints` 时，
+    token 加权压缩率 `0.8421x`；同样的代码、同样的卡数，只把重复那一份去掉就是 `1.4985x`。
+    """
+
+    def test_accepts_a_mutually_exclusive_card(self) -> None:
+        report = verify_field_mutual_exclusion(
+            [
+                {
+                    "summary": "T3 组：3 条消息、1 条事实。",
+                    "facts": ["压测数据 2026-09-30 之前给出。"],
+                    "decisions": ["决定先做读缓存。"],
+                    "todos": ["张三负责压测报告。"],
+                    "constraints": ["不得删除 `adapter.py`。"],
+                }
+            ]
+        )
+        self.assertTrue(report.ok, report.summary())
+
+    def test_rejects_same_sentence_in_two_fields(self) -> None:
+        report = verify_field_mutual_exclusion(
+            [{"summary": "概述", "facts": ["决定先做读缓存。"], "decisions": ["决定先做读缓存。"]}]
+        )
+        self.assertFalse(report.ok)
+        self.assertIn("field_mutual_exclusion", report.missing)
+        self.assertIn("facts 与 decisions", "".join(report.missing["field_mutual_exclusion"]))
+
+    def test_rejects_duplicate_within_one_field(self) -> None:
+        report = verify_field_mutual_exclusion(
+            [{"summary": "概述", "facts": ["预算 12 万。", "预算 12 万。"]}]
+        )
+        self.assertFalse(report.ok)
+        self.assertIn("写了两次", "".join(report.missing["field_mutual_exclusion"]))
+
+    def test_rejects_summary_restating_a_field_sentence(self) -> None:
+        """C6 的第二条：summary 不得逐字复述字段里的句子——否则它只堵了一半。"""
+        report = verify_field_mutual_exclusion(
+            [{"summary": "决定先做读缓存。", "decisions": ["决定先做读缓存。"]}]
+        )
+        self.assertFalse(report.ok)
+        self.assertIn("summary 逐字复述", "".join(report.missing["field_mutual_exclusion"]))
+
+    def test_summary_may_use_its_own_words(self) -> None:
+        """不复述就不算违规——判据只拦「同一句话写两遍」，不拦真正的概述。"""
+        report = verify_field_mutual_exclusion(
+            [{"summary": "本轮定下读缓存方向。", "decisions": ["决定先做读缓存。"]}]
+        )
+        self.assertTrue(report.ok, report.summary())
 
 
 if __name__ == "__main__":

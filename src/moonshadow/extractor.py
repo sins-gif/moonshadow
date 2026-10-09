@@ -147,6 +147,8 @@ def extract_batch(
     tier_hint: str = "",
     *,
     sentence_fields: bool = True,
+    summary_style: str = "counts",
+    allow_duplication: bool = False,
 ) -> list[MemoryCard]:
     """一批消息（`≤10` 条）→ 卡列表。签名即 Phase 2 的 LLM 抽取器要满足的形状。
 
@@ -181,7 +183,14 @@ def extract_batch(
         group = [message for message, own in tiers_of if own == tier]
         if not group:
             continue
-        cards.append(_merge_group(group, tier, diagnostics, sentence_fields=sentence_fields))
+        cards.append(
+            _merge_group(
+                group, tier, diagnostics,
+                sentence_fields=sentence_fields,
+                summary_style=summary_style,
+                allow_duplication=allow_duplication,
+            )
+        )
 
     diagnostics.cards = len(cards)
     _LAST_BATCH_DIAGNOSTICS.append(diagnostics)
@@ -194,8 +203,10 @@ def _merge_group(
     diagnostics: BatchDiagnostics,
     *,
     sentence_fields: bool = True,
+    summary_style: str = "counts",
+    allow_duplication: bool = False,
 ) -> MemoryCard:
-    """把一个 (批, tier) 组里的信息项归并成一张卡。"""
+    """把一个 (批, tier) 组里的信息项归并成一张卡（**遵守 C6：卡内字段互斥**）。"""
     sentences: list[tuple[str, int]] = []  # (句子, 该句 token)
     for message in group:
         for sentence in _sentences(message.text):
@@ -214,8 +225,8 @@ def _merge_group(
         1 for message in group if not extract_key_fields(message.text)
     )
 
-    # 每个信息项只留一处载体：包含它的最长句子；同句只写一次。
-    carriers: dict[str, int] = {}
+    # 每个信息项只留一处载体：包含它的最长句子。
+    carriers: set[str] = set()
     for item in item_messages:
         best: int | None = None
         for index, (sentence, tokens) in enumerate(sentences):
@@ -223,45 +234,59 @@ def _merge_group(
                 if best is None or tokens > sentences[best][1]:
                     best = index
         if best is not None:
-            carriers[item] = best
+            carriers.add(normalize(sentences[best][0]))
 
+    # C6：每条句子按**语义类别**只进一个字段。一句话只能有一个载体字段，
+    # 所以这里先按整组去重句子，再逐句定归属，绝不把同一句写进第二个字段。
+    # 优先级（约束/否定 > 决策 > 待办 > 事实）是契约没规定、实现先猜的一处，见探针的接口诊段。
     facts: list[str] = []
-    seen_sentences: set[str] = set()
-    for index in sorted(set(carriers.values())):
-        sentence = sentences[index][0]
+    decisions: list[str] = []
+    todos: list[str] = []
+    constraints: list[str] = []
+    seen: set[str] = set()
+    for sentence, _ in sentences:
         key = normalize(sentence)
-        if key not in seen_sentences:
-            seen_sentences.add(key)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        if sentence_fields and _keywords_hit(sentence, _CONSTRAINT_WORDS):
+            constraints.append(sentence)
+        elif sentence_fields and _keywords_hit(sentence, _DECISION_WORDS):
+            decisions.append(sentence)
+        elif sentence_fields and _keywords_hit(sentence, _TODO_WORDS):
+            todos.append(sentence)
+        elif key in carriers:
             facts.append(sentence)
+        # 其余句子（不含硬字段、也不是关键字句）不写进任何字段：那是抽象，规则版不做。
+
+    if allow_duplication and sentence_fields:
+        # **故意违反 C6** 的对照：把关键字句再往 facts 里写一遍（C6 之前的形状）。
+        # 只给探针做归因用——让「C6 到底值多少压缩率」在同一个 summary 口径下可比。
+        for sentence in (*constraints, *decisions, *todos):
+            key = normalize(sentence)
+            if key and all(normalize(item) != key for item in facts):
+                facts.append(sentence)
 
     joined = "\n".join(message.text for message in group)
+    if summary_style == "minimal":
+        # 只写一个标识：用来把「summary 自身的 token 成本」从读数里单独分出来。
+        summary = tier
+    else:
+        # summary 只写整体概述（计数），**不逐字复述**任何字段里的句子——C6 的第二条。
+        summary = (
+            f"{tier} 组：{len(group)} 条消息、{len(facts)} 条事实、"
+            f"{len(decisions)} 条决策、{len(todos)} 条待办、{len(constraints)} 条约束。"
+        )
     return MemoryCard(
         tier=tier,
-        # summary 只写概述：与 facts 复述同一批句子正是基线膨胀的来源。
-        summary=f"{tier} 组，{len(group)} 条消息。",
+        summary=summary,
         source_ids=[message.id for message in group],
         importance=TIER_IMPORTANCE[tier],
         network=baseline_network(joined, tier),
         facts=facts,
-        decisions=[
-            sentence
-            for sentence in _sentences(joined)
-            if _keywords_hit(sentence, _DECISION_WORDS)
-        ]
-        if sentence_fields
-        else [],
-        todos=[
-            sentence for sentence in _sentences(joined) if _keywords_hit(sentence, _TODO_WORDS)
-        ]
-        if sentence_fields
-        else [],
-        constraints=[
-            sentence
-            for sentence in _sentences(joined)
-            if _keywords_hit(sentence, _CONSTRAINT_WORDS)
-        ]
-        if sentence_fields
-        else [],
+        decisions=decisions,
+        todos=todos,
+        constraints=constraints,
     )
 
 

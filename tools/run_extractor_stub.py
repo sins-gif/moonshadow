@@ -54,13 +54,28 @@ class StubExtractor:
     这是接口漏洞 #1 的落点，探针里显式传空串（而不是编一个值），让「没人填」这件事可见。
     """
 
-    def __init__(self, *, sentence_fields: bool = True, name: str = "stub-rules") -> None:
+    def __init__(
+        self,
+        *,
+        sentence_fields: bool = True,
+        summary_style: str = "counts",
+        allow_duplication: bool = False,
+        name: str = "stub-rules",
+    ) -> None:
         self.sentence_fields = sentence_fields
+        self.summary_style = summary_style
+        self.allow_duplication = allow_duplication
         self.name = name
 
     def __call__(self, messages: Sequence[Mapping[str, Any]]) -> Iterable[Mapping[str, Any]]:
         batch = [Message.from_mapping(message) for message in messages]
-        for card in extract_batch(batch, tier_hint="", sentence_fields=self.sentence_fields):
+        for card in extract_batch(
+            batch,
+            tier_hint="",
+            sentence_fields=self.sentence_fields,
+            summary_style=self.summary_style,
+            allow_duplication=self.allow_duplication,
+        ):
             yield card.to_draft()
 
 
@@ -77,6 +92,7 @@ class CaseAudit:
     lost_in_card: list[str] = field(default_factory=list)
     unreachable: list[str] = field(default_factory=list)
     fields_used: dict[str, int] = field(default_factory=dict)
+    field_tokens: dict[str, int] = field(default_factory=dict)
 
     @property
     def compression(self) -> float:
@@ -125,6 +141,13 @@ def audit_case(case: GoldCase) -> tuple[CaseAudit, list[BatchDiagnostics]]:
                 value = card.get(name)
                 if value:
                     audit.fields_used[name] = audit.fields_used.get(name, 0) + 1
+                    if isinstance(value, str):
+                        pieces = [value]
+                    else:
+                        pieces = [str(item) for item in value]
+                    audit.field_tokens[name] = audit.field_tokens.get(name, 0) + sum(
+                        estimate_tokens(piece) for piece in pieces
+                    )
             for values in extract_key_fields(text).values():
                 del values  # 只用于计数：见下面的硬字段全量比对
         audit.uncited_messages = sorted(
@@ -194,20 +217,40 @@ def main() -> int:
     print(f"  两侧一致：{same}")
 
     print()
-    print("  归因阶梯（同一份代码、同一个卡数，只改「卡上写哪些字段」）：")
-    print(f"      {'变体':<34}{'逐用例平均':>11}{'token 加权':>12}{'卡数':>6}")
+    print("  归因阶梯（同一份代码、同一个卡数；A/B/C 三行 summary 口径相同，只有字段分配不同）：")
+    print(
+        f"      {'变体':<42}{'逐用例平均':>11}{'token 加权':>12}{'卡数':>6}{'过门':>6}{'C6违规':>8}"
+    )
     for label, engine in (
-        ("完整 stub（facts + 逐句字段）", StubExtractor()),
-        ("只写 facts（不写逐句字段）", StubExtractor(sentence_fields=False, name="stub-facts-only")),
+        ("[现状] C6 合规 + 计数式 summary", StubExtractor()),
+        ("A 违反 C6（复述）+ 极简 summary", StubExtractor(
+            allow_duplication=True, summary_style="minimal", name="stub-dup")),
+        ("B 遵守 C6（四字段）+ 极简 summary", StubExtractor(
+            summary_style="minimal", name="stub-c6")),
+        ("C 遵守 C6 只写 facts + 极简 summary", StubExtractor(
+            sentence_fields=False, summary_style="minimal", name="stub-facts-only")),
     ):
         variant = run_eval(cases=cases, extractor=engine)
+        violations = sum(len(r.field_violations) for r in variant.results)
         print(
-            f"      {label:<34}{variant.compression_ratio:>10.4f}x"
+            f"      {label:<42}{variant.compression_ratio:>10.4f}x"
             f"{variant.weighted_compression:>11.4f}x"
             f"{sum(r.cards for r in variant.results):>6}"
+            f"{'PASS' if variant.ok else 'FAIL':>6}{violations:>8}"
         )
-    print("      → 两者卡数相同，差额全部来自「同一句话又进了一次 decisions/todos/constraints」；")
-    print("        契约没规定这件事，而它值这么多压缩率。")
+    print("      A→B = C6 的价值（同一句话不再写第二遍）；B→C = 逐句字段承载整句原文的成本")
+    print("      （只有抽象能去掉，规则版做不到）。首行与 B 的差 = summary 自身的 token 成本。")
+    print("      A 那一行**过不了门**：C6 判据确实在拦人，不是文档里的装饰。")
+
+    print()
+    print("  卡 token 的字段构成（全部 241 张卡，按字段归集）：")
+    field_tokens: dict[str, int] = {}
+    for audit in audits:
+        for name, tokens in audit.field_tokens.items():
+            field_tokens[name] = field_tokens.get(name, 0) + tokens
+    total_card = sum(field_tokens.values()) or 1
+    for name, tokens in sorted(field_tokens.items(), key=lambda item: -item[1]):
+        print(f"      {name:<12}{tokens:>8,} tok   {tokens / total_card:>6.1%}")
 
     print()
     print("【3】契约检查（决定退出码）")

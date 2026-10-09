@@ -115,12 +115,19 @@ class GoldLoadingTest(unittest.TestCase):
 
 
 class EvalGateTest(unittest.TestCase):
-    def test_baseline_passes_the_gate(self) -> None:
+    def test_baseline_passes_the_field_gate(self) -> None:
+        """基线在**字段保留**上过门（`1.0000` ≥ `0.98`），但它**违反 C6**。
+
+        v1.3 加入 C6（卡内字段互斥）之后，规则基线不再是「合规模板」：
+        它把同一句话同时写进 `facts` 与 `decisions`/`todos`/`constraints`，
+        实测 `751` 条违规。所以这条测试现在只断言**字段保留那一侧**，
+        并显式断言 C6 违规确实存在——两者都是事实，不该被一条 `assertTrue(report.ok)` 混在一起。
+        """
         report = run_eval(extractor=BaselineExtractor())
-        self.assertTrue(report.ok, report.summary())
         self.assertGreaterEqual(report.key_field_recall, DEFAULT_MIN_RECALL)
-        self.assertGreater(report.compression_ratio, 0.0)
-        self.assertIn("PASS", report.summary())
+        violations = [r for r in report.results if r.field_violations]
+        self.assertTrue(violations, "基线按定义违反 C6，这里应当有违规")
+        self.assertFalse(report.ok, "违反 C6 的抽取器不该过门")
 
     def test_lossy_extractor_fails_the_gate(self) -> None:
         """故意不可用的抽取器必须被判失败。
@@ -168,10 +175,12 @@ class EvalGateTest(unittest.TestCase):
         self.assertEqual(result.missing_tiers, ["T9"])
 
     def test_expanding_extractor_is_flagged(self) -> None:
-        """压缩率 < 1 必须明确告警：PASS 不等于压缩有效。"""
+        """压缩率 < 1 必须明确告警：PASS 不等于压缩有效。
+
+        不断言 `report.ok`：基线违反 C6，整体判定本来就是 FAIL——告警与判定是两件事。
+        """
         report = run_eval(extractor=BaselineExtractor())
-        self.assertTrue(report.ok)
-        self.assertLess(report.compression_ratio, 1.0)
+        self.assertLess(report.weighted_compression, 1.0)
         self.assertIn("膨胀", report.summary())
 
     def test_dropped_qualitative_message_is_caught(self) -> None:

@@ -79,6 +79,7 @@ from .verify import (
     card_text_many,
     extract_key_fields,
     normalize,
+    verify_field_mutual_exclusion,
     verify_no_silent_loss,
     verify_qualitative_retention,
 )
@@ -172,6 +173,8 @@ class CaseResult:
     shared_sources: int = 0
     #: 定性内容（决策/硬约束/否定）没有载体的条目。见 `verify.verify_qualitative_retention`。
     uncarried: list[str] = field(default_factory=list)
+    #: 违反 C6（卡内字段互斥）的条目。见 `verify.verify_field_mutual_exclusion`。
+    field_violations: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         verdict = "PASS" if self.ok else "FAIL"
@@ -183,6 +186,8 @@ class CaseResult:
         details = []
         if self.lost:
             details.append(f"丢字段={self.lost}")
+        if self.field_violations:
+            details.append(f"C6 字段互斥违规={self.field_violations}")
         if self.uncarried:
             details.append(f"定性内容无载体={self.uncarried}")
         if self.missing_expected:
@@ -366,6 +371,8 @@ def run_case(
         report = verify_no_silent_loss(raw_text, cards, sources=sources)
         # 定性内容判据：硬字段保住 ≠ 内容保住（决策/约束/否定一个硬字段都没有）。
         qualitative = verify_qualitative_retention(raw_messages, cards)
+        # C6：卡内字段互斥（同一句话只能有一个载体字段；summary 不得逐字复述）。
+        mutual = verify_field_mutual_exclusion(cards)
 
         extracted = extract_key_fields(raw_text)
         total_fields = sum(len(values) for values in extracted.values())
@@ -386,7 +393,13 @@ def run_case(
         tier_stats, shared = _tier_stats(cards, store)
         return CaseResult(
             case_id=case.id,
-            ok=report.ok and qualitative.ok and not missing_expected and not missing_tiers,
+            ok=(
+                report.ok
+                and qualitative.ok
+                and mutual.ok
+                and not missing_expected
+                and not missing_tiers
+            ),
             recall=recall,
             total_fields=total_fields,
             lost=dict(report.missing),
@@ -400,6 +413,7 @@ def run_case(
             tier_stats=tier_stats,
             shared_sources=shared,
             uncarried=list(qualitative.missing.get("qualitative", [])),
+            field_violations=list(mutual.missing.get("field_mutual_exclusion", [])),
         )
     except Exception as exc:  # 单条用例异常不应掩盖其他用例的结果
         return CaseResult(
