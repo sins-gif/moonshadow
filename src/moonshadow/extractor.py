@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
@@ -134,6 +135,12 @@ class BatchDiagnostics:
     items: int = 0
     items_multi_message: int = 0
     cards: int = 0
+    #: LLM 输出里 `claims` 是**字符串**（而非 `make_card` 要的对象数组）的条数。
+    #: 解析器把它们**显式降级**进 `facts` 并计数：不猜 `kind`、不猜 `predicate`。
+    #: 猜错就是一条静默的错标，而「猜不准就不猜」是本仓库一贯的取舍。
+    #: 这个计数**只进诊断、不进 `CaseResult`**——它是抽取器质量问题，不是契约违规，
+    #: 混进 `CaseResult` 会污染 C8 的豁免/违规机制。
+    unstructured_claims: int = 0
 
 
 _LAST_BATCH_DIAGNOSTICS: list[BatchDiagnostics] = []
@@ -353,6 +360,66 @@ def _build_summary(
             if normalize(item) not in normalize(text):
                 text = f"{text}；{item}" if text else item
     return text
+
+
+def parse_llm_cards(
+    raw_text: str, diagnostics: BatchDiagnostics | None = None
+) -> list[MemoryCard]:
+    """LLM 分支：raw 文本 → `list[MemoryCard]`。**接口签名从真实输出里长出来的**。
+
+    三批真实 dump 定下的四条事实（不是推测）：
+
+    1. **整体是合法 JSON 数组**：无 markdown 代码块、无解释性前言（三批 0 例外），
+       所以解析层不需要剥离外壳。哪天出现外壳，这里要加剥离——那属于接口的一部分。
+    2. **`claims` 是字符串数组**，而 `cards.make_card` 要的是对象数组（按 `claim["kind"]` 取键）。
+       **决策：显式降级**——str claim 原样进 `facts`，`unstructured_claims` 计数；
+       不猜 `kind`/`predicate`、不构造对象。`claims` 字段本身不进 `MemoryCard`（置空）。
+       理由：`kind` 是语义判断（decision/opinion/todo），规则版猜不准，猜错是**静默错标**；
+       宁可降级，不可猜错。降级不触发 C6（`facts` 本就是陈述句容器），C1 追溯路径不变。
+    3. **LLM 会用满 `network` 四类**（`observation` 出现 3 次），而规则版 `baseline_network`
+       永不输出 `observation`。所以 `network` 分布是**抽取器相关的**，不是不变量。
+    4. **`summary` 长度跨度极大**（16–233 字符），C8 的长度条款会在这里第一次被压到。
+
+    参数 `diagnostics` 用于把降级计数写到既有的批次诊断里；不传则新建一个。
+    """
+    container = diagnostics if diagnostics is not None else BatchDiagnostics()
+    payload = json.loads(raw_text)
+    if not isinstance(payload, list):
+        raise ValueError(f"LLM 输出顶层不是数组，而是 {type(payload).__name__}")
+
+    cards: list[MemoryCard] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            raise ValueError(f"卡元素不是对象，而是 {type(item).__name__}")
+        facts = [str(value) for value in item.get("facts") or ()]
+        for claim in item.get("claims") or ():
+            if isinstance(claim, str):
+                # 显式降级：原样进 facts，计数，**不猜结构**
+                if claim not in facts:
+                    facts.append(claim)
+                container.unstructured_claims += 1
+        cards.append(
+            MemoryCard(
+                tier=str(item["tier"]),
+                summary=str(item.get("summary") or ""),
+                source_ids=[str(value) for value in item.get("source_ids") or ()],
+                importance=int(item["importance"]) if item.get("importance") is not None else None,
+                network=str(item["network"]) if item.get("network") else None,
+                facts=facts,
+                decisions=[str(value) for value in item.get("decisions") or ()],
+                todos=[str(value) for value in item.get("todos") or ()],
+                constraints=[str(value) for value in item.get("constraints") or ()],
+                entities=[str(value) for value in item.get("entities") or ()],
+                keywords=[str(value) for value in item.get("keywords") or ()],
+                confidence=(
+                    float(item["confidence"]) if item.get("confidence") is not None else None
+                ),
+            )
+        )
+    container.cards = len(cards)
+    if diagnostics is None:
+        _LAST_BATCH_DIAGNOSTICS.append(container)
+    return cards
 
 
 def canonical_item(value: str) -> str:
