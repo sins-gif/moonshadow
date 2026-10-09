@@ -336,15 +336,21 @@ def verify_summary_substance(cards: Sequence[Mapping[str, Any]]) -> Report:
             for field_name in MUTUALLY_EXCLUSIVE_FIELDS
             for value in (card.get(field_name) or ())
         )
-        # 先算「提及」，再判长度：**C8.3 规定提及优先于上限**。
+        # C8.2（方案 B）：只要求覆盖**硬要点**——该条目里 HARD_PATTERNS 的匹配逐个出现。
+        # 不含硬字段的条目不作要求：LLM 抽象掉非硬要点是正常行为，旧判据在那里过严
+        # （实测 17 条被标记的 decision 里 0 条含硬字段）。
         missed: list[str] = []
         for field_name in ("decisions", "todos", "constraints"):
             for value in card.get(field_name) or ():
-                key = normalize(str(value))
-                if key and not _shared_fragment(summary, key, SUMMARY_MENTION_CHARS):
-                    missed.append(
-                        f"{card_id} summary 未提及 {field_name} 里的一条要点 → {key[:30]}"
-                    )
+                for hard in (
+                    item
+                    for values in extract_key_fields(str(value)).values()
+                    for item in values
+                ):
+                    if normalize(hard) not in summary:
+                        missed.append(
+                            f"{card_id} summary 未覆盖 {field_name} 里的硬要点 → {hard}"
+                        )
         if field_tokens:
             summary_tokens = estimate_tokens(raw_summary)
             low = SUMMARY_SHARE_MIN * field_tokens

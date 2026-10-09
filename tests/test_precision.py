@@ -12,6 +12,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from moonshadow.eval import assert_comparable  # noqa: E402
 from moonshadow.verify import (  # noqa: E402
     CARD_TEXT_FIELDS,
     QUALITATIVE_KEYWORDS,
@@ -19,8 +20,7 @@ from moonshadow.verify import (  # noqa: E402
     Report,
     card_text,
     extract_key_fields,
-    normalize,
-    verify_field_mutual_exclusion,
+    normalize,    verify_field_mutual_exclusion,
     verify_no_silent_loss,
     verify_qualitative_retention,
     verify_summary_substance,
@@ -285,11 +285,11 @@ class FieldMutualExclusionTest(unittest.TestCase):
 class SummarySubstanceTest(unittest.TestCase):
     """C8：`summary` 必须承载内容。C6 只禁止它复述，没要求它有信息量。"""
 
-    #: 字段合计 48 tok（决策 30 + 待办 18）；合规摘要 11 tok ≈ 23%，落在 10%–40% 内。
+    #: `todos` 含硬字段 `2026-10-15`（C8.2 方案 B 只要求覆盖硬要点）。
     CARD = {
-        "summary": "先做读缓存；张三负责",
-        "decisions": ["决定先做读缓存，写路径这一轮完全不动，后面按这个方向排期。"],
-        "todos": ["张三负责压测报告，两周内给出第一版。"],
+        "summary": "先做读缓存；张三负责，2026-10-15 前交付",
+        "decisions": ["决定先做读缓存，写路径这一轮完全不动。"],
+        "todos": ["张三负责压测报告，2026-10-15 前给出第一版。"],
     }
 
     def test_compliant_summary_passes(self) -> None:
@@ -307,7 +307,7 @@ class SummarySubstanceTest(unittest.TestCase):
         report = verify_summary_substance([{**self.CARD, "summary": "见字段"}])
         self.assertFalse(report.ok)
         joined = "".join(report.missing["summary_substance"])
-        self.assertIn("未提及", joined)
+        self.assertIn("未覆盖", joined)
 
     def test_overlong_summary_is_rejected(self) -> None:
         """超过 40% **且漏了要点**才拒——C8.3 规定提及优先于上限。"""
@@ -315,7 +315,7 @@ class SummarySubstanceTest(unittest.TestCase):
             [{**self.CARD, "summary": "决定先做读缓存写路径这一轮完全不动后面按这个方向排期"}]
         )
         self.assertFalse(report.ok)
-        self.assertIn("未提及", "".join(report.missing["summary_substance"]))
+        self.assertIn("未覆盖", "".join(report.missing["summary_substance"]))
 
     def test_summary_long_but_covered_passes(self) -> None:
         """**C8.3**：超 40% 但覆盖全部要点 → 通过（上限放宽到覆盖所需长度，不算违约）。"""
@@ -326,6 +326,29 @@ class SummarySubstanceTest(unittest.TestCase):
         }
         report = verify_summary_substance([card])
         self.assertTrue(report.ok, report.summary())
+
+
+class ShapeFingerprintTest(unittest.TestCase):
+    """守卫：任何「A 比 B」的读数前先对齐形状——三次同类错误都出在这里。"""
+
+    def test_same_shape_is_comparable(self) -> None:
+        fp = {"cases": 25, "cards": 241, "field_usage": {"facts": 58}, "field_tokens": {"facts": 3478}}
+        assert_comparable(fp, dict(fp))  # 不抛错即放行
+
+    def test_different_shape_is_refused(self) -> None:
+        left = {"cases": 25, "cards": 241, "field_usage": {"facts": 58}, "field_tokens": {"facts": 3478}}
+        right = {"cases": 25, "cards": 241, "field_usage": {"facts": 131}, "field_tokens": {"facts": 3478}}
+        with self.assertRaises(ValueError) as caught:
+            assert_comparable(left, right, left_label="现状", right_label="变体")
+        self.assertIn("不可比", str(caught.exception))
+        self.assertIn("field_usage[facts]", str(caught.exception))
+
+    def test_card_count_mismatch_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            assert_comparable(
+                {"cases": 25, "cards": 241, "field_usage": {}, "field_tokens": {}},
+                {"cases": 25, "cards": 474, "field_usage": {}, "field_tokens": {}},
+            )
 
 
 if __name__ == "__main__":

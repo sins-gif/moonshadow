@@ -345,7 +345,14 @@ def _build_summary(
     # ③ **不为了压到 40% 以下而丢条目**：那会牺牲「提及」这条实质要求。
     #    小卡上两条判据互斥（提及全部要点所需长度 > 字段合计的 40%），此时保提及、让长度违约——
     #    契约缺一条优先级规定，这一条记在 `docs/v1.3-spec.md` §6.2。
-    return "；".join(fragments)
+    # ③ **硬要点必须出现**（C8.2 方案 B）：片段前缀未必含硬值（`预算先按18` 里就没有 `18 万元`），
+    #    所以显式补上三字段里全部 HARD_PATTERNS 匹配；长度可能超 40%，由 C8.3 允许。
+    text = "；".join(fragments)
+    for value in (*decisions, *todos, *constraints):
+        for item in (hit for hits in extract_key_fields(str(value)).values() for hit in hits):
+            if normalize(item) not in normalize(text):
+                text = f"{text}；{item}" if text else item
+    return text
 
 
 def canonical_item(value: str) -> str:

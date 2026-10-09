@@ -31,6 +31,8 @@ from moonshadow.compress import compile_session, classify_fast_path  # noqa: E40
 from moonshadow.eval import (  # noqa: E402
     GoldCase,
     WORK_DIR,
+    assert_comparable,
+    format_fingerprint,
     load_gold,
     run_eval,
 )
@@ -240,6 +242,26 @@ def main() -> int:
         )
     print("      现状→A = C6 的价值（同一句话不再写第二遍）；现状 vs D = C8 的代价（摘要必须承载内容）")
     print("      现状→C = 逐句字段承载整句原文的成本（只有抽象能去掉，规则版做不到）")
+
+    print()
+    print("  结构指纹守卫（任何「A 比 B」之前先对齐形状；三次同类错报都出在这里）：")
+    base_report = run_eval(cases=cases, extractor=StubExtractor())
+    dup_report = run_eval(
+        cases=cases, extractor=StubExtractor(allow_duplication=True, name="stub-dup")
+    )
+    for label, report in (("现状", base_report), ("A 违反 C6（复述）", dup_report)):
+        print(f"      {label:<18}{format_fingerprint(report.shape_fingerprint())}")
+    try:
+        assert_comparable(
+            base_report.shape_fingerprint(),
+            dup_report.shape_fingerprint(),
+            left_label="现状",
+            right_label="A 违反 C6（复述）",
+        )
+        print("      → 形状一致，可以比较")
+    except ValueError as exc:
+        print(f"      → **拒绝比较**：{exc}")
+        print("        （A 行改的是字段构成，不只是 C6 合规性；拿它当「C6 的价值」不成立）")
 
     print()
     print("  卡 token 的字段构成（全部 241 张卡，按字段归集）：")
