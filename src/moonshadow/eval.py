@@ -76,6 +76,7 @@ from .pack import estimate_tokens
 from .store import Store
 from .tiers import TIER_ORDER
 from .verify import (
+    CARD_TEXT_FIELDS,
     card_text_many,
     extract_key_fields,
     normalize,
@@ -194,6 +195,9 @@ class CaseResult:
     summary_violations: list[str] = field(default_factory=list)
     #: C6.1 豁免：被指定为参照点的抽取器（基线）的卡契约违规（C6 + C8）记在这里，不计入失败。
     expected_violations: list[str] = field(default_factory=list)
+    #: 结构指纹的两半：字段使用次数、每卡字段构成（token）。见 `shape_fingerprint`。
+    field_usage: dict[str, int] = field(default_factory=dict)
+    field_tokens: dict[str, int] = field(default_factory=dict)
 
     def summary(self) -> str:
         verdict = "PASS" if self.ok else "FAIL"
@@ -280,6 +284,30 @@ class EvalReport:
     def summary_violations(self) -> int:
         """真正导致失败的 C8 违规条数。"""
         return sum(len(r.summary_violations) for r in self.results)
+
+    def shape_fingerprint(self) -> dict[str, Any]:
+        """**结构指纹**：任何「A 比 B」的读数之前，先证明两边形状一致。
+
+        这个守卫是踩了三次同类错误之后加的，三次根因相同——**测量前没对齐两边的形状**：
+        两次「不同 summary 口径」比出了错的 C6 值（`1.36x`），一次「改了 extractor 默认
+        却没改探针适配器」比出了不存在的 68 条 C8 冲突。
+
+        指纹三项：**卡数**、**字段使用次数**、**每卡字段构成（按 token）**。
+        任一不同，两边就不是同一件事，不许比较。
+        """
+        usage: dict[str, int] = {}
+        tokens: dict[str, int] = {}
+        for result in self.results:
+            for field_name, count in result.field_usage.items():
+                usage[field_name] = usage.get(field_name, 0) + count
+            for field_name, value in result.field_tokens.items():
+                tokens[field_name] = tokens.get(field_name, 0) + value
+        return {
+            "cases": len(self.results),
+            "cards": sum(r.cards for r in self.results),
+            "field_usage": dict(sorted(usage.items())),
+            "field_tokens": dict(sorted(tokens.items())),
+        }
 
     def tier_stats(self) -> list[TierStat]:
         """把逐用例的层级读数合并成 T0–T9 全表（未出现的层级保留 0 值行）。"""
@@ -463,6 +491,18 @@ def run_case(
         raw_tokens = sum(estimate_tokens(text) for text in case.messages)
         card_tokens = sum(estimate_tokens(card_text_many([card])) for card in cards) or 1
         tier_stats, shared = _tier_stats(cards, store)
+        usage: dict[str, int] = {}
+        field_tokens: dict[str, int] = {}
+        for card in cards:
+            for name in CARD_TEXT_FIELDS:
+                value = card.get(name)
+                if not value:
+                    continue
+                usage[name] = usage.get(name, 0) + 1
+                pieces = [value] if isinstance(value, str) else [str(item) for item in value]
+                field_tokens[name] = field_tokens.get(name, 0) + sum(
+                    estimate_tokens(piece) for piece in pieces
+                )
         # C6.1：参照点抽取器的卡契约违规（C6 + C8）是**预期**，记在另一个字段里、不判失败。
         exempt = is_baseline_extractor(extractor) if is_baseline is None else is_baseline
         c6 = list(mutual.missing.get("field_mutual_exclusion", []))
@@ -492,6 +532,8 @@ def run_case(
             field_violations=[] if exempt else c6,
             summary_violations=[] if exempt else c8,
             expected_violations=(c6 + c8) if exempt else [],
+            field_usage=usage,
+            field_tokens=field_tokens,
         )
     except Exception as exc:  # 单条用例异常不应掩盖其他用例的结果
         return CaseResult(
@@ -499,6 +541,49 @@ def run_case(
         )
     finally:
         store.close()
+
+
+def format_fingerprint(fingerprint: Mapping[str, Any]) -> str:
+    """指纹的单行渲染，用于并排打印 A 与 B。"""
+    usage = " ".join(f"{k}={v}" for k, v in fingerprint["field_usage"].items())
+    tokens = " ".join(f"{k}={v:,}" for k, v in fingerprint["field_tokens"].items())
+    return (
+        f"cases={fingerprint['cases']} cards={fingerprint['cards']} | "
+        f"字段次数[{usage}] | 字段token[{tokens}]"
+    )
+
+
+def fingerprint_diff(left: Mapping[str, Any], right: Mapping[str, Any]) -> list[str]:
+    """两份指纹的差异项；空列表 = 形状一致，可以比较。"""
+    diff: list[str] = []
+    for key in ("cases", "cards"):
+        if left.get(key) != right.get(key):
+            diff.append(f"{key}: {left.get(key)} vs {right.get(key)}")
+    for key in ("field_usage", "field_tokens"):
+        left_map = left.get(key) or {}
+        right_map = right.get(key) or {}
+        for name in sorted(set(left_map) | set(right_map)):
+            if left_map.get(name, 0) != right_map.get(name, 0):
+                diff.append(
+                    f"{key}[{name}]: {left_map.get(name, 0)} vs {right_map.get(name, 0)}"
+                )
+    return diff
+
+
+def assert_comparable(
+    left: Mapping[str, Any],
+    right: Mapping[str, Any],
+    *,
+    left_label: str = "A",
+    right_label: str = "B",
+) -> None:
+    """形状不一致就**拒绝比较**——宁可报「不可比」，也不要报一个混了两种形状的数。
+
+    本项目的三次错报全部来自后者。
+    """
+    diff = fingerprint_diff(left, right)
+    if diff:
+        raise ValueError(f"{left_label} 与 {right_label} 的结构指纹不一致，读数不可比：{diff}")
 
 
 def run_eval(
