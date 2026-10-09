@@ -41,13 +41,25 @@ T3 近期待办/截止；T4 一般方案/讨论结论；T5 日常事实；T6 短
 T7 临时草稿；T8 寒暄确认；T9 噪音。
 
 实体规则：必须消解所有代词为具体实体（「他」→「张三」），不得残留代词。
+**entities / keywords 是可选字段**：只有当实体或关键词**对召回有区分度**时才写
+（例如专有名词、单号、模块名）；日常词汇、泛化描述、卡内已出现的重复词一律**不写**，
+没有就写空数组 `[]`。这两栏会被计入卡 token，滥写直接抬高压缩成本。
 冲突规则：冲突不合并；输出新卡，并把被取代的旧卡 id 放进 supersedes。
 不确定的字段写 null 或 "不确定"，禁止编造。
 每张卡必须带 source_ids，且只能来自输入消息的 id。
 
+**summary 长度规则：每张卡的 summary 不超过 60 个字。** 它是概述，不是第二份字段：
+不得逐字复述 facts/decisions/todos/constraints 里的句子，必须逐个覆盖这些字段里的
+日期、金额、URL、反引号代码（硬要点），其余内容可以概括。
+
+**claims 必须是对象数组**，每个元素形如
+`{{"kind": "decision|opinion|todo", "predicate": "简短谓词", "object": "要点"}}`；
+**不得输出字符串数组**（字符串 claim 会被降级进 facts 并计入质量诊断）。示例：
+`"claims": [{{"kind": "decision", "predicate": "采用", "object": "限流加扩容双管齐下"}}]`
+
 输出字段：tier, importance(1-10), network(world|experience|opinion|observation),
-summary, entities, keywords, facts, decisions, todos, constraints, claims, raw_quote,
-confidence, source_ids。只输出 JSON 数组，不要任何解释文字。
+summary(≤60 字), entities, keywords, facts, decisions, todos, constraints, claims(对象数组),
+confidence, source_ids。**不要输出 raw_quote。** 只输出 JSON 数组，不要任何解释文字。
 
 输入消息：
 {messages}
