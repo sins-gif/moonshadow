@@ -141,6 +141,12 @@ class BatchDiagnostics:
     #: 这个计数**只进诊断、不进 `CaseResult`**——它是抽取器质量问题，不是契约违规，
     #: 混进 `CaseResult` 会污染 C8 的豁免/违规机制。
     unstructured_claims: int = 0
+    #: **机械 C6 抓不到的重叠上界**：降级到 `facts` 的句子与 `decisions`/`todos`/`constraints`
+    #: 中的句子**共享至少一个 `HARD_PATTERNS` 匹配**的条数（一句只计一次）。
+    #: 判据与 C8.2 同源、不引入语义相似度（那会带进新模型与新参数，属 v1.4）。
+    #: 它是**上界**：有交集不一定真重叠，没有交集一定不重叠。用于回答
+    #: 「C6 机械通过 ≠ 语义通过」，也是 OQ 议题的输入数据。
+    facts_decisions_overlap_candidates: int = 0
 
 
 _LAST_BATCH_DIAGNOSTICS: list[BatchDiagnostics] = []
@@ -362,6 +368,15 @@ def _build_summary(
     return text
 
 
+def _hard_set(text: str) -> set[str]:
+    """一句里的 `HARD_PATTERNS` 匹配集合（归一化）。用于「机械 C6 抓不到的重叠」判据。"""
+    return {
+        normalize(item)
+        for values in extract_key_fields(text).values()
+        for item in values
+    }
+
+
 def parse_llm_cards(
     raw_text: str, diagnostics: BatchDiagnostics | None = None
 ) -> list[MemoryCard]:
@@ -392,12 +407,25 @@ def parse_llm_cards(
         if not isinstance(item, dict):
             raise ValueError(f"卡元素不是对象，而是 {type(item).__name__}")
         facts = [str(value) for value in item.get("facts") or ()]
+        downgraded: list[str] = []
         for claim in item.get("claims") or ():
             if isinstance(claim, str):
                 # 显式降级：原样进 facts，计数，**不猜结构**
                 if claim not in facts:
                     facts.append(claim)
+                downgraded.append(claim)
                 container.unstructured_claims += 1
+        # 机械 C6 抓不到的重叠：按 HARD_PATTERNS 交集计（与 C8.2 同源，不引入语义相似度）
+        others = [
+            str(value)
+            for field_name in ("decisions", "todos", "constraints")
+            for value in item.get(field_name) or ()
+        ]
+        other_sets = [_hard_set(text) for text in others]
+        for sentence in downgraded:
+            mine = _hard_set(sentence)
+            if mine and any(mine & other for other in other_sets):
+                container.facts_decisions_overlap_candidates += 1
         cards.append(
             MemoryCard(
                 tier=str(item["tier"]),
