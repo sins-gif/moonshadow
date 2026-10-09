@@ -240,10 +240,10 @@ moonshadow/
 ├── .gitattributes       `* -text`：禁止换行转换（否则留出集冻结哈希会在 checkout 后全部失效）
 ├── schema.json          记忆卡 JSON Schema（强制校验，additionalProperties=false）
 ├── ddl.sql              SQLite 建表：card / claim / source / card_source / cursor / entity*
-├── docs/                11 份：现行 4 + 权威 1 + 索引 + 想法池 + 历史版本 4（见下）
+├── docs/                12 份：现行 4 + v1.3 草案 1 + 权威 1 + 索引 + 想法池 + 历史版本 4（见下）
 ├── src/moonshadow/      18 个文件 / 17 个模块（纯标准库，含 STUB 抽取器）
 ├── tools/               16 个可执行命令 = **15 条发布验证命令 + 1 条 Phase 2 临时探针**（`run_llm_probe.py` 需本地 LLM key，无 key 时退出 2，**不参与发布验证**）（审计 + 评测 + 重划 + 守卫 + 探针）
-├── eval/                用例集：gold 3 + rank 26 + holdout 9（冻结）+ network 48 + 冻结清单
+├── eval/                用例集：gold 25 + rank 26 + holdout 9（冻结）+ network 48 + 冻结清单
 ├── tests/               14 个测试文件 / 241 项断言
 ├── examples/demo.py     端到端演示
 └── experiments/         用户自算记录（原样保存，不得修改；见文件内说明）
@@ -258,6 +258,7 @@ docs/                   按版本号排列，文件名前缀保证字典序 = �
   v1.2-summary.md       交接总览：现状、已确认/已失效结论、缺陷、下一步、复跑索引
   v1.2-roadmap.md       储备方案（分组 f、自适应 h）与 §7.1 批次验收规则 R1/R2/R3
   v1.2-candidates.md    v1.2 提案评估：逐条处置、与现有证据的冲突、重切分、v1.2-A 实测
+  v1.3-spec.md          v1.3 **草案**（未封版）：C1–C8.3 契约、Phase 1 收口与 Phase 2 起步判据
   v1.1-spec.md          ┐
   v1.1-weights.md       │ 历史版本 · 思考过程记录（与现行并列保留；
   v1.1-summary.md       │ **其数据不作为依据**，读它是为了追溯推理链）

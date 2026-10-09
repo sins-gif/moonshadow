@@ -28,7 +28,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 - **Bounded multiplicative correction** (`q = r · m`, `m ∈ [f, 1]`) avoids the **threshold-inseparability** defect of additive fusion:
   on the same case set, additive reverses `117` pairs inside the region where multiplicative is **guaranteed** not to, while multiplicative goes out of bounds `0` times;
   additive's ranking agreement **also ties at full marks** (`1.000` vs `1.000`) — **a defect that ranking metrics cannot see, exposed by threshold calibration and the drift experiment**.
-- **241 unit assertions + 14 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
+- **241 unit assertions + 15 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
   whether negatives are really blocked by the gate, whether the holdout set has been modified, whether the assignment forms in the docs match the code — **all executable and re-runnable**.
 
 ## Project status (v1.2)
@@ -239,11 +239,11 @@ moonshadow/
 ├── .gitattributes       `* -text`: disables newline conversion (otherwise the frozen holdout hashes all break after checkout)
 ├── schema.json          memory-card JSON Schema (enforced validation, additionalProperties=false)
 ├── ddl.sql              SQLite DDL: card / claim / source / card_source / cursor / entity*
-├── docs/                11 files: 4 current + 1 authoritative + index + idea backlog + 4 historical (see below)
+├── docs/                12 files: 4 current + 1 v1.3 draft + 1 authoritative + index + idea backlog + 4 historical (see below)
 ├── src/moonshadow/      17 files / 16 modules (standard library only)
-├── tools/               15 executables = 15 release-verification commands + 1 Phase 2 probe
+├── tools/               16 executables = 15 release-verification commands + 1 Phase 2 probe
 │                        (run_llm_probe.py needs a local LLM key; it is not part of release verification)
-├── eval/                case sets: gold 3 + rank 26 + holdout 9 (frozen) + network 48 + frozen manifest
+├── eval/                case sets: gold 25 + rank 26 + holdout 9 (frozen) + network 48 + frozen manifest
 ├── tests/               14 test files / 241 assertions
 ├── examples/demo.py     end-to-end demo
 └── experiments/         the user's own hand computations (kept verbatim, must not be modified; see the notes in the files)
@@ -258,6 +258,7 @@ docs/                   ordered by version number; the filename prefix makes lex
   v1.2-summary.md       handover overview: status, confirmed/invalidated conclusions, defects, next steps, rerun index
   v1.2-roadmap.md       reserved proposals (grouped f, adaptive h) and the §7.1 batch-acceptance rules R1/R2/R3
   v1.2-candidates.md    v1.2 proposal evaluation: item-by-item disposition, conflicts with existing evidence, re-split, v1.2-A measurements
+  v1.3-spec.md          v1.3 **draft** (not sealed): the C1–C8.3 contracts, Phase 1 closure and the Phase 2 entry criteria
   v1.1-spec.md          ┐
   v1.1-weights.md       │ historical versions · records of the thinking process (kept alongside the current
   v1.1-summary.md       │ ones; **their data is not to be relied on** — read them to trace the reasoning chain)
