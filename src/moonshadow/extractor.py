@@ -378,7 +378,9 @@ def _hard_set(text: str) -> set[str]:
 
 
 def parse_llm_cards(
-    raw_text: str, diagnostics: BatchDiagnostics | None = None
+    raw_text: str,
+    diagnostics: BatchDiagnostics | None = None,
+    label_to_id: Mapping[str, str] | None = None,
 ) -> list[MemoryCard]:
     """LLM 分支：raw 文本 → `list[MemoryCard]`。**接口签名从真实输出里长出来的**。
 
@@ -396,6 +398,8 @@ def parse_llm_cards(
     4. **`summary` 长度跨度极大**（16–233 字符），C8 的长度条款会在这里第一次被压到。
 
     参数 `diagnostics` 用于把降级计数写到既有的批次诊断里；不传则新建一个。
+    **`label_to_id` 是接口的一部分**：LLM 输出的 `source_ids` 是提示词局部标签（`m1`…`mN`），不是 store id；
+    不映射就会让 C1 把每条消息判成「无载体」。映射不到的标签原样保留（不静默丢弃）。
     """
     container = diagnostics if diagnostics is not None else BatchDiagnostics()
     payload = json.loads(raw_text)
@@ -430,7 +434,10 @@ def parse_llm_cards(
             MemoryCard(
                 tier=str(item["tier"]),
                 summary=str(item.get("summary") or ""),
-                source_ids=[str(value) for value in item.get("source_ids") or ()],
+                source_ids=[
+                    str((label_to_id or {}).get(str(value), str(value)))
+                    for value in item.get("source_ids") or ()
+                ],
                 importance=int(item["importance"]) if item.get("importance") is not None else None,
                 network=str(item["network"]) if item.get("network") else None,
                 facts=facts,

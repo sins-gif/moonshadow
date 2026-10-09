@@ -13,6 +13,7 @@ from __future__ import annotations
 import pathlib
 import shutil
 import sys
+import json
 import unittest
 from datetime import datetime, timezone
 
@@ -20,6 +21,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from moonshadow import FixedClock, Store  # noqa: E402
+from moonshadow.extractor import parse_llm_cards  # noqa: E402
 from moonshadow.compress import (  # noqa: E402
     BaselineExtractor,
     build_prompt,
@@ -160,6 +162,32 @@ class CompileSessionTest(unittest.TestCase):
         self.assertEqual(report.processed, 0)
         self.assertEqual(report.inserted, 0)
         self.assertIsNone(report.cursor)
+
+
+class PromptAndLabelTest(unittest.TestCase):
+    """prompt 模板与 source_id 标签映射（都是接口的一部分）。"""
+
+    def test_prompt_renders_and_brace_example_is_json(self) -> None:
+        """PROMPT_TEMPLATE 走 .format()：模板里的字面大括号必须写 {{ }}。
+        实测踩过：写成单个大括号 → KeyError → 35 个测试失败。本测试同时验证
+        渲染不抛错、且提示词里的 claims 示例是**合法 JSON**。"""
+        prompt = build_prompt(
+            [{"id": "m1", "text": "示例", "created_at": "2026-10-01T09:00:00+00:00"}]
+        )
+        self.assertIn("claims 必须是对象数组", prompt)
+        marker = 'claims": ['
+        start = prompt.index(marker) + len(marker) - 1
+        end = prompt.index("]", start) + 1
+        parsed = json.loads(prompt[start:end])
+        self.assertEqual(parsed[0]["kind"], "decision")
+
+    def test_label_to_id_maps_prompt_labels_to_store_ids(self) -> None:
+        """LLM 的 `source_ids` 是提示词局部标签，管线必须映射；映射不到的原样保留。"""
+        cards = parse_llm_cards(
+            '[{"tier": "T3", "summary": "s", "source_ids": ["m1", "m9"]}]',
+            label_to_id={"m1": "src_a"},
+        )
+        self.assertEqual(cards[0].source_ids, ["src_a", "m9"])
 
 
 if __name__ == "__main__":
