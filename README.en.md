@@ -11,7 +11,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 | **Minimal rerun** | `python -m unittest discover -s tests` → `Ran 222 tests` + `OK` |
 
 > **This version is the data-driven parameter-convergence release**: `f = 0.5925`, `θ = θ′ = 0.3941`, default scheme multiplicative;
-> `T9` is covered on the negative side only (the gap is on record). Sealed-release reading: **all 13 tools exit `0`**.
+> `T9` is covered on the negative side only (the gap is on record). Sealed-release reading: **all 14 tools exit `0`**.
 
 - Current specification (**read this first**): **`docs/v1.2-spec.md`** ← definitions, contracts and **fixed parameter values**
 - **Documentation index / where to start**: `docs/README.md` ← authority map, reading order, maintenance rules
@@ -27,7 +27,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 - **Bounded multiplicative correction** (`q = r · m`, `m ∈ [f, 1]`) avoids the **threshold-inseparability** defect of additive fusion:
   on the same case set, additive reverses `117` pairs inside the region where multiplicative is **guaranteed** not to, while multiplicative goes out of bounds `0` times;
   additive's ranking agreement **also ties at full marks** (`1.000` vs `1.000`) — **a defect that ranking metrics cannot see, exposed by threshold calibration and the drift experiment**.
-- **222 unit assertions + 13 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
+- **222 unit assertions + 14 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
   whether negatives are really blocked by the gate, whether the holdout set has been modified, whether the assignment forms in the docs match the code — **all executable and re-runnable**.
 
 ## Project status (v1.2)
