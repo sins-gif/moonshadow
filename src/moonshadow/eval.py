@@ -82,6 +82,7 @@ from .verify import (
     verify_field_mutual_exclusion,
     verify_no_silent_loss,
     verify_qualitative_retention,
+    verify_summary_substance,
 )
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -189,7 +190,9 @@ class CaseResult:
     uncarried: list[str] = field(default_factory=list)
     #: 违反 C6（卡内字段互斥）的条目。见 `verify.verify_field_mutual_exclusion`。
     field_violations: list[str] = field(default_factory=list)
-    #: C6.1 豁免：被指定为参照点的抽取器（基线）的 C6 违规记在这里，不计入失败。
+    #: 违反 C8（`summary` 必须承载内容）的条目。见 `verify.verify_summary_substance`。
+    summary_violations: list[str] = field(default_factory=list)
+    #: C6.1 豁免：被指定为参照点的抽取器（基线）的卡契约违规（C6 + C8）记在这里，不计入失败。
     expected_violations: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
@@ -211,9 +214,11 @@ class CaseResult:
             details.append(f"丢字段={brief(list(self.lost.values()))}")
         if self.field_violations:
             details.append(f"C6 字段互斥违规={brief(self.field_violations)}")
+        if self.summary_violations:
+            details.append(f"C8 summary 承载违规={brief(self.summary_violations)}")
         if self.expected_violations:
             details.append(
-                f"C6 违规（预期，C6.1 基线豁免 {len(self.expected_violations)} 条）="
+                f"卡契约违规（预期，C6.1 基线豁免 {len(self.expected_violations)} 条）="
                 f"{brief(self.expected_violations, 1)}"
             )
         if self.uncarried:
@@ -270,6 +275,11 @@ class EvalReport:
     def field_violations(self) -> int:
         """真正导致失败的 C6 违规条数。"""
         return sum(len(r.field_violations) for r in self.results)
+
+    @property
+    def summary_violations(self) -> int:
+        """真正导致失败的 C8 违规条数。"""
+        return sum(len(r.summary_violations) for r in self.results)
 
     def tier_stats(self) -> list[TierStat]:
         """把逐用例的层级读数合并成 T0–T9 全表（未出现的层级保留 0 值行）。"""
@@ -333,14 +343,19 @@ class EvalReport:
         lines.extend(self.tier_table())
         if self.expected_violations:
             lines.append(
-                f"C6.1 基线豁免：C6 违规 {self.expected_violations} 条（**预期**）——"
-                "参照点抽取器按定义不遵守 v1.3 的卡契约，它保持原地不动；"
-                "豁免只对它生效，见 `eval.BASELINE_IDENTIFIERS` 与 spec C6.1。"
+                f"C6.1 基线豁免：卡契约违规 {self.expected_violations} 条（**预期**）——"
+                "参照点抽取器按定义不遵守 v1.3 的卡契约（C6 字段互斥 + C8 summary 承载），"
+                "它保持原地不动；豁免只对它生效，见 `eval.BASELINE_IDENTIFIERS` 与 spec C6.1。"
             )
         if self.field_violations:
             lines.append(
                 f"FAIL  C6（卡内字段互斥）违规 {self.field_violations} 条："
                 "同一句话只能有一个载体字段，`summary` 不得逐字复述（spec C6）。"
+            )
+        if self.summary_violations:
+            lines.append(
+                f"FAIL  C8（summary 必须承载内容）违规 {self.summary_violations} 条："
+                "`summary` 必须提及每条决策/待办/约束，且长度占字段 token 的 10%–40%（spec C8）。"
             )
         if self.compression_ratio < 1.0 or self.weighted_compression < 1.0:
             lines.append(
@@ -428,6 +443,8 @@ def run_case(
         qualitative = verify_qualitative_retention(raw_messages, cards)
         # C6：卡内字段互斥（同一句话只能有一个载体字段；summary 不得逐字复述）。
         mutual = verify_field_mutual_exclusion(cards)
+        # C8：summary 必须承载内容（提及每条要点 + 长度占字段 token 的 10%–40%）。
+        substance = verify_summary_substance(cards)
 
         extracted = extract_key_fields(raw_text)
         total_fields = sum(len(values) for values in extracted.values())
@@ -446,15 +463,16 @@ def run_case(
         raw_tokens = sum(estimate_tokens(text) for text in case.messages)
         card_tokens = sum(estimate_tokens(card_text_many([card])) for card in cards) or 1
         tier_stats, shared = _tier_stats(cards, store)
-        # C6.1：参照点抽取器的 C6 违规是**预期**，记在另一个字段里、不判失败。
+        # C6.1：参照点抽取器的卡契约违规（C6 + C8）是**预期**，记在另一个字段里、不判失败。
         exempt = is_baseline_extractor(extractor) if is_baseline is None else is_baseline
-        violations = list(mutual.missing.get("field_mutual_exclusion", []))
+        c6 = list(mutual.missing.get("field_mutual_exclusion", []))
+        c8 = list(substance.missing.get("summary_substance", []))
         return CaseResult(
             case_id=case.id,
             ok=(
                 report.ok
                 and qualitative.ok
-                and (exempt or not violations)
+                and (exempt or (not c6 and not c8))
                 and not missing_expected
                 and not missing_tiers
             ),
@@ -471,8 +489,9 @@ def run_case(
             tier_stats=tier_stats,
             shared_sources=shared,
             uncarried=list(qualitative.missing.get("qualitative", [])),
-            field_violations=[] if exempt else violations,
-            expected_violations=violations if exempt else [],
+            field_violations=[] if exempt else c6,
+            summary_violations=[] if exempt else c8,
+            expected_violations=(c6 + c8) if exempt else [],
         )
     except Exception as exc:  # 单条用例异常不应掩盖其他用例的结果
         return CaseResult(

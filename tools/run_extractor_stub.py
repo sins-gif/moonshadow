@@ -58,7 +58,7 @@ class StubExtractor:
         self,
         *,
         sentence_fields: bool = True,
-        summary_style: str = "counts",
+        summary_style: str = "digest",
         allow_duplication: bool = False,
         name: str = "stub-rules",
     ) -> None:
@@ -222,13 +222,13 @@ def main() -> int:
         f"      {'变体':<42}{'逐用例平均':>11}{'token 加权':>12}{'卡数':>6}{'过门':>6}{'C6违规':>8}"
     )
     for label, engine in (
-        ("[现状] C6 合规 + 计数式 summary", StubExtractor()),
-        ("A 违反 C6（复述）+ 极简 summary", StubExtractor(
-            allow_duplication=True, summary_style="minimal", name="stub-dup")),
-        ("B 遵守 C6（四字段）+ 极简 summary", StubExtractor(
-            summary_style="minimal", name="stub-c6")),
-        ("C 遵守 C6 只写 facts + 极简 summary", StubExtractor(
-            sentence_fields=False, summary_style="minimal", name="stub-facts-only")),
+        ("[现状] 遵守 C6+C8（四字段 + 片段摘要）", StubExtractor()),
+        ("A 违反 C6（复述），其余同现状", StubExtractor(
+            allow_duplication=True, name="stub-dup")),
+        ("C 遵守 C6 只写 facts，其余同现状", StubExtractor(
+            sentence_fields=False, name="stub-facts-only")),
+        ("D 遵守 C6，但 summary 极简（违反 C8）", StubExtractor(
+            summary_style="minimal", name="stub-minimal-summary")),
     ):
         variant = run_eval(cases=cases, extractor=engine)
         violations = sum(len(r.field_violations) for r in variant.results)
@@ -238,9 +238,8 @@ def main() -> int:
             f"{sum(r.cards for r in variant.results):>6}"
             f"{'PASS' if variant.ok else 'FAIL':>6}{violations:>8}"
         )
-    print("      A→B = C6 的价值（同一句话不再写第二遍）；B→C = 逐句字段承载整句原文的成本")
-    print("      （只有抽象能去掉，规则版做不到）。首行与 B 的差 = summary 自身的 token 成本。")
-    print("      A 那一行**过不了门**：C6 判据确实在拦人，不是文档里的装饰。")
+    print("      现状→A = C6 的价值（同一句话不再写第二遍）；现状 vs D = C8 的代价（摘要必须承载内容）")
+    print("      现状→C = 逐句字段承载整句原文的成本（只有抽象能去掉，规则版做不到）")
 
     print()
     print("  卡 token 的字段构成（全部 241 张卡，按字段归集）：")

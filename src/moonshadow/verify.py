@@ -14,6 +14,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
+from .pack import estimate_tokens
+
 #: 必须原样保留的字段类型 —— 这些一旦丢失，摘要就不可信。
 HARD_PATTERNS: dict[str, str] = {
     "date": r"\d{4}-\d{2}-\d{2}",
@@ -68,6 +70,16 @@ MUTUALLY_EXCLUSIVE_FIELDS: tuple[str, ...] = ("facts", "decisions", "todos", "co
 #: 另外 685 处片段重叠也根本不是「复述整句」。**边界要写明**：片段级复述逃得出这条判据，
 #: 那是 C6 的已知缺口（见 `docs/v1.3-spec.md` §6.2 漏洞 #10）。
 SUMMARY_RESTATEMENT_MIN_CHARS = 12
+
+#: **C8（`summary` 必须承载内容）**的三个参数。
+#: 「覆盖要点（不要求逐字）」在机械层只能近似：要求 `summary` 与每条
+#: `decisions`/`todos`/`constraints` **共享至少一个 `SUMMARY_MENTION_CHARS` 字的连续片段**。
+#: 它拦得住 `summary="T0"` 与「见字段」这种退化，但拦不住「把片段拼起来当概述」——
+#: 那正是漏洞 #10 的同一条缝，Phase 2 要面对的是语义摘要，不是这条机械下限。
+SUMMARY_MENTION_CHARS = 4
+#: `summary` 的 token 数必须落在「该卡四个字段 token 之和」的这个区间里。
+SUMMARY_SHARE_MIN = 0.10
+SUMMARY_SHARE_MAX = 0.40
 
 #: 参与「卡内文本」比对的字段。**`raw_quote` 不在其中**（v1.3 决定 Q3）：
 #: 卡把原文整段抄一遍不是压缩，把它计入卡文本就等于给逐字复制发许可证——
@@ -283,6 +295,70 @@ def verify_field_mutual_exclusion(cards: Sequence[Mapping[str, Any]]) -> Report:
 
     if violations:
         report.missing["field_mutual_exclusion"] = violations
+    return report
+
+
+def _shared_fragment(left: str, right: str, length: int) -> bool:
+    """两段归一化文本是否共享至少一个 `length` 字的连续片段。"""
+    if not left or not right:
+        return False
+    if len(right) < length:
+        return right in left
+    return any(right[index : index + length] in left for index in range(len(right) - length + 1))
+
+
+def verify_summary_substance(cards: Sequence[Mapping[str, Any]]) -> Report:
+    """**C8：`summary` 必须承载内容**（契约见 `docs/v1.3-spec.md` §2 C8）。
+
+    两条子判据：
+
+    1. **提及每一条要点**：`decisions`/`todos`/`constraints` 里的每一条，
+       `summary` 都必须与它共享至少 `SUMMARY_MENTION_CHARS` 字的连续片段
+       （「覆盖最小要点、不要求逐字」的机械近似）。
+    2. **长度区间**：`summary` 的 token 数必须落在该卡四个字段 token 之和的
+       `10%–40%` 之内。字段合计为 0 时跳过这一条（那时 `summary` 是唯一的载体）。
+
+    为什么需要它：`summary` 占卡 token 的 `25.6%`（实测），而 C6 只禁止它**复述**、
+    没要求它有**信息量**——一个 `summary="T0"` 或「见字段」的抽取器能拿到很好看的压缩率
+    却什么也没说。`summary` 能否退化，直接决定压缩率是不是可信。
+
+    **已知边界**：这两条都是机械下限。片段拼接式的「概述」能同时满足它们，
+    却仍不是语义摘要——那是 Phase 2 的 LLM 要跨过的门槛，不是这条判据能判的。
+    """
+    report = Report()
+    violations: list[str] = []
+    for card in cards:
+        card_id = str(card.get("id", "?"))[:8]
+        raw_summary = str(card.get("summary") or "")
+        summary = normalize(raw_summary)
+        field_tokens = sum(
+            estimate_tokens(str(value))
+            for field_name in MUTUALLY_EXCLUSIVE_FIELDS
+            for value in (card.get(field_name) or ())
+        )
+        if field_tokens:
+            summary_tokens = estimate_tokens(raw_summary)
+            low = SUMMARY_SHARE_MIN * field_tokens
+            high = SUMMARY_SHARE_MAX * field_tokens
+            if summary_tokens < low:
+                violations.append(
+                    f"{card_id} summary 过短：{summary_tokens} tok < 字段合计 {field_tokens} 的 "
+                    f"10%（{low:.1f}）→ {summary[:30] or '（空）'}"
+                )
+            elif summary_tokens > high:
+                violations.append(
+                    f"{card_id} summary 过长：{summary_tokens} tok > 字段合计 {field_tokens} 的 "
+                    f"40%（{high:.1f}）"
+                )
+        for field_name in ("decisions", "todos", "constraints"):
+            for value in card.get(field_name) or ():
+                key = normalize(str(value))
+                if key and not _shared_fragment(summary, key, SUMMARY_MENTION_CHARS):
+                    violations.append(
+                        f"{card_id} summary 未提及 {field_name} 里的一条要点 → {key[:30]}"
+                    )
+    if violations:
+        report.missing["summary_substance"] = violations
     return report
 
 

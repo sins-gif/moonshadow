@@ -23,6 +23,7 @@ from moonshadow.verify import (  # noqa: E402
     verify_field_mutual_exclusion,
     verify_no_silent_loss,
     verify_qualitative_retention,
+    verify_summary_substance,
 )
 
 
@@ -279,6 +280,42 @@ class FieldMutualExclusionTest(unittest.TestCase):
             [{"summary": "本轮定下读缓存方向。", "decisions": ["决定先做读缓存。"]}]
         )
         self.assertTrue(report.ok, report.summary())
+
+
+class SummarySubstanceTest(unittest.TestCase):
+    """C8：`summary` 必须承载内容。C6 只禁止它复述，没要求它有信息量。"""
+
+    #: 字段合计 48 tok（决策 30 + 待办 18）；合规摘要 11 tok ≈ 23%，落在 10%–40% 内。
+    CARD = {
+        "summary": "先做读缓存；张三负责",
+        "decisions": ["决定先做读缓存，写路径这一轮完全不动，后面按这个方向排期。"],
+        "todos": ["张三负责压测报告，两周内给出第一版。"],
+    }
+
+    def test_compliant_summary_passes(self) -> None:
+        report = verify_summary_substance([self.CARD])
+        self.assertTrue(report.ok, report.summary())
+
+    def test_bare_tier_summary_is_rejected(self) -> None:
+        """`summary="T0"` 是 C8 存在的理由：压缩率好看，内容为零。"""
+        report = verify_summary_substance([{**self.CARD, "summary": "T0"}])
+        self.assertFalse(report.ok)
+        self.assertIn("summary_substance", report.missing)
+
+    def test_pointer_summary_is_rejected(self) -> None:
+        """「见字段」式摘要必须被拒——否则 `summary` 可以退化成空壳。"""
+        report = verify_summary_substance([{**self.CARD, "summary": "见字段"}])
+        self.assertFalse(report.ok)
+        joined = "".join(report.missing["summary_substance"])
+        self.assertIn("未提及", joined)
+
+    def test_overlong_summary_is_rejected(self) -> None:
+        """摘要超过字段 token 的 40% 就不是概述，是第二份字段。"""
+        report = verify_summary_substance(
+            [{**self.CARD, "summary": "决定先做读缓存写路径这一轮完全不动后面按这个方向排期张三负责压测报告两周内给出第一版"}]
+        )
+        self.assertFalse(report.ok)
+        self.assertIn("过长", "".join(report.missing["summary_substance"]))
 
 
 if __name__ == "__main__":

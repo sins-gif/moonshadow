@@ -35,7 +35,13 @@ from .compress import (
 )
 from .pack import estimate_tokens
 from .tiers import TIER_ORDER
-from .verify import extract_key_fields, normalize
+from .verify import (
+    SUMMARY_MENTION_CHARS,
+    SUMMARY_SHARE_MAX,
+    SUMMARY_SHARE_MIN,
+    extract_key_fields,
+    normalize,
+)
 
 #: tier 关键词表在 `compress.TIER_KEYWORDS` 里是「顺序即优先级」的元组，
 #: 这里按用途取用，不重新定义词表。
@@ -147,7 +153,7 @@ def extract_batch(
     tier_hint: str = "",
     *,
     sentence_fields: bool = True,
-    summary_style: str = "counts",
+    summary_style: str = "digest",
     allow_duplication: bool = False,
 ) -> list[MemoryCard]:
     """一批消息（`≤10` 条）→ 卡列表。签名即 Phase 2 的 LLM 抽取器要满足的形状。
@@ -203,7 +209,7 @@ def _merge_group(
     diagnostics: BatchDiagnostics,
     *,
     sentence_fields: bool = True,
-    summary_style: str = "counts",
+    summary_style: str = "digest",
     allow_duplication: bool = False,
 ) -> MemoryCard:
     """把一个 (批, tier) 组里的信息项归并成一张卡（**遵守 C6：卡内字段互斥**）。"""
@@ -268,15 +274,9 @@ def _merge_group(
                 facts.append(sentence)
 
     joined = "\n".join(message.text for message in group)
-    if summary_style == "minimal":
-        # 只写一个标识：用来把「summary 自身的 token 成本」从读数里单独分出来。
-        summary = tier
-    else:
-        # summary 只写整体概述（计数），**不逐字复述**任何字段里的句子——C6 的第二条。
-        summary = (
-            f"{tier} 组：{len(group)} 条消息、{len(facts)} 条事实、"
-            f"{len(decisions)} 条决策、{len(todos)} 条待办、{len(constraints)} 条约束。"
-        )
+    summary = _build_summary(
+        tier, facts, decisions, todos, constraints, style=summary_style
+    )
     return MemoryCard(
         tier=tier,
         summary=summary,
@@ -288,6 +288,64 @@ def _merge_group(
         todos=todos,
         constraints=constraints,
     )
+
+
+def _build_summary(
+    tier: str,
+    facts: Sequence[str],
+    decisions: Sequence[str],
+    todos: Sequence[str],
+    constraints: Sequence[str],
+    *,
+    style: str = "digest",
+) -> str:
+    """按 C8 生成 `summary`：**必须提及每条要点，且长度占字段 token 的 10%–40%**。
+
+    规则版能做的只有「片段摘要」：从每条 `decisions`/`todos`/`constraints` 里取一段
+    ≥ `SUMMARY_MENTION_CHARS` 字的开头片段拼起来。它满足 C8 的两条机械判据，
+    但**不是语义摘要**——这正是漏洞 #10 的那条缝，也是 Phase 2 的 LLM 必须跨过的门槛。
+    探针里保留 `style="minimal"` 等变体，用来把「summary 的成本」单独量出来。
+
+    两条判据在小卡上会**互相冲突**（要提及 N 条要点所需的最小长度 > 字段合计的 40%）：
+    那时片段按顺序尽量放，放不下的条目会被记进 C8 违规——
+    这不是 stub 偷懒，是契约本身没有规定「提及」与「长度上限」谁优先。
+    """
+    if style == "minimal":
+        return tier
+    if style == "counts":
+        return (
+            f"{tier} 组：{len(facts)} 条事实、{len(decisions)} 条决策、"
+            f"{len(todos)} 条待办、{len(constraints)} 条约束。"
+        )
+
+    entries = [normalize(value) for value in (*decisions, *todos, *constraints, *facts)]
+    entries = [value for value in entries if value]
+    if not entries:
+        return tier
+    field_tokens = sum(
+        estimate_tokens(value)
+        for values in (facts, decisions, todos, constraints)
+        for value in values
+    )
+    if not field_tokens:
+        return "；".join(entries)[:12]
+
+    low = SUMMARY_SHARE_MIN * field_tokens
+    high = SUMMARY_SHARE_MAX * field_tokens
+    # ①「提及」优先：每条要点各取最短合法片段（`SUMMARY_MENTION_CHARS` 字）。
+    length = SUMMARY_MENTION_CHARS
+    fragments = [value[:length] for value in entries]
+    # ② 不足 10% 就把片段一起加长，但**只在不超过 40% 上限时**加长。
+    while estimate_tokens("；".join(fragments)) < low and length < 48:
+        longer = [value[: length + 6] for value in entries]
+        if estimate_tokens("；".join(longer)) > high:
+            break
+        length += 6
+        fragments = longer
+    # ③ **不为了压到 40% 以下而丢条目**：那会牺牲「提及」这条实质要求。
+    #    小卡上两条判据互斥（提及全部要点所需长度 > 字段合计的 40%），此时保提及、让长度违约——
+    #    契约缺一条优先级规定，这一条记在 `docs/v1.3-spec.md` §6.2。
+    return "；".join(fragments)
 
 
 def canonical_item(value: str) -> str:
