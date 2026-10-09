@@ -244,24 +244,31 @@ def main() -> int:
     print("      现状→C = 逐句字段承载整句原文的成本（只有抽象能去掉，规则版做不到）")
 
     print()
-    print("  结构指纹守卫（任何「A 比 B」之前先对齐形状；三次同类错报都出在这里）：")
-    base_report = run_eval(cases=cases, extractor=StubExtractor())
-    dup_report = run_eval(
-        cases=cases, extractor=StubExtractor(allow_duplication=True, name="stub-dup")
-    )
-    for label, report in (("现状", base_report), ("A 违反 C6（复述）", dup_report)):
-        print(f"      {label:<18}{format_fingerprint(report.shape_fingerprint())}")
-    try:
-        assert_comparable(
-            base_report.shape_fingerprint(),
-            dup_report.shape_fingerprint(),
-            left_label="现状",
-            right_label="A 违反 C6（复述）",
-        )
-        print("      → 形状一致，可以比较")
-    except ValueError as exc:
-        print(f"      → **拒绝比较**：{exc}")
-        print("        （A 行改的是字段构成，不只是 C6 合规性；拿它当「C6 的价值」不成立）")
+    print("  结构指纹守卫（消融必须**声明自变量**；未声明的差异 → 拒绝比较）：")
+    variants = {
+        "现状": StubExtractor(),
+        "A 复述": StubExtractor(allow_duplication=True, name="stub-dup"),
+        "C 只 facts": StubExtractor(sentence_fields=False, name="stub-facts-only"),
+        "D 极简摘要": StubExtractor(summary_style="minimal", name="stub-minimal-summary"),
+    }
+    # 每个消融声明它改了哪些字段：那是自变量，不是形状错配。
+    declared = {
+        "A 复述": ("facts",),            # 只多了 facts 里的复述
+        "C 只 facts": ("decisions", "todos", "constraints"),
+        "D 极简摘要": ("summary",),
+    }
+    reports = {name: run_eval(cases=cases, extractor=engine) for name, engine in variants.items()}
+    base = reports["现状"].shape_fingerprint()
+    print(f"      现状（基准）      {format_fingerprint(base)}")
+    for name in ("A 复述", "C 只 facts", "D 极简摘要"):
+        other = reports[name].shape_fingerprint()
+        vary = declared[name]
+        print(f"      {name:<18}{format_fingerprint(other)}")
+        try:
+            assert_comparable(base, other, left_label="现状", right_label=name, vary=vary)
+            print(f"        → 声明自变量 {vary}，其余形状一致：**可以比较**")
+        except ValueError as exc:
+            print(f"        → **拒绝比较**：{exc}")
 
     print()
     print("  卡 token 的字段构成（全部 241 张卡，按字段归集）：")

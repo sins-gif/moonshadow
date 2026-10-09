@@ -553,16 +553,27 @@ def format_fingerprint(fingerprint: Mapping[str, Any]) -> str:
     )
 
 
-def fingerprint_diff(left: Mapping[str, Any], right: Mapping[str, Any]) -> list[str]:
-    """两份指纹的差异项；空列表 = 形状一致，可以比较。"""
+def fingerprint_diff(
+    left: Mapping[str, Any], right: Mapping[str, Any], *, vary: Sequence[str] = ()
+) -> list[str]:
+    """两份指纹的**未声明**差异；空列表 = 可比较。
+
+    `vary` 是**声明过的消融变量**（字段名，或 `cases`/`cards`）。消融必然改变字段构成——
+    那是实验的自变量，不是形状错配。守卫要拦的是**没声明的**差异：
+    三次同类错报（`1.36x`、68 条假冲突、把不同 summary 口径当同一形状）全部属于后者。
+    """
     diff: list[str] = []
     for key in ("cases", "cards"):
+        if key in vary:
+            continue
         if left.get(key) != right.get(key):
             diff.append(f"{key}: {left.get(key)} vs {right.get(key)}")
     for key in ("field_usage", "field_tokens"):
         left_map = left.get(key) or {}
         right_map = right.get(key) or {}
         for name in sorted(set(left_map) | set(right_map)):
+            if name in vary:
+                continue
             if left_map.get(name, 0) != right_map.get(name, 0):
                 diff.append(
                     f"{key}[{name}]: {left_map.get(name, 0)} vs {right_map.get(name, 0)}"
@@ -576,14 +587,17 @@ def assert_comparable(
     *,
     left_label: str = "A",
     right_label: str = "B",
+    vary: Sequence[str] = (),
 ) -> None:
     """形状不一致就**拒绝比较**——宁可报「不可比」，也不要报一个混了两种形状的数。
 
-    本项目的三次错报全部来自后者。
+    `vary` 里声明的字段是本次实验的自变量，允许不同；其余任何差异都会让比较被拒绝。
     """
-    diff = fingerprint_diff(left, right)
+    diff = fingerprint_diff(left, right, vary=vary)
     if diff:
-        raise ValueError(f"{left_label} 与 {right_label} 的结构指纹不一致，读数不可比：{diff}")
+        raise ValueError(
+            f"{left_label} 与 {right_label} 的结构指纹有**未声明**差异，读数不可比：{diff}"
+        )
 
 
 def run_eval(
