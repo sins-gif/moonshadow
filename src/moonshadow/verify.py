@@ -61,6 +61,14 @@ CARRY_FORBIDDEN_TIERS: tuple[str, ...] = ("T8", "T9")
 #: `summary` 不在其中——它受另一条约束（不得逐字复述上述字段里的任何句子）。
 MUTUALLY_EXCLUSIVE_FIELDS: tuple[str, ...] = ("facts", "decisions", "todos", "constraints")
 
+#: C6 第二条（`summary` 不得逐字复述）里「算一句话」的最小长度（归一化后字符数）。
+#: 与 `tests/test_eval.py` 的反灌水判据同一条线：**片段不是句子**。
+#: 实测踩过：规则基线的 `facts` 里既有整句也有关键字段片段（`12万`、`2026-10-15`），
+#: 初版判据把片段也当句子去比，于是 589 条 `summary` 违规里有 46 条是片段命中，
+#: 另外 685 处片段重叠也根本不是「复述整句」。**边界要写明**：片段级复述逃得出这条判据，
+#: 那是 C6 的已知缺口（见 `docs/v1.3-spec.md` §6.2 漏洞 #10）。
+SUMMARY_RESTATEMENT_MIN_CHARS = 12
+
 #: 参与「卡内文本」比对的字段。**`raw_quote` 不在其中**（v1.3 决定 Q3）：
 #: 卡把原文整段抄一遍不是压缩，把它计入卡文本就等于给逐字复制发许可证——
 #: 去掉它之后压缩率才是对「抽取器有没有真的抽象」的度量。
@@ -223,6 +231,16 @@ def verify_field_mutual_exclusion(cards: Sequence[Mapping[str, Any]]) -> Report:
 
     判定用的是**归一化后的整句**（`normalize`：去空格与逗号）。不做语义等价判断——
     那是第二级模型校验的职责；这里只拒绝「同一句话写两遍」这种机械可判的重复。
+
+    两条子判据与它们的粒度：
+
+    1. **字段互斥**：判的是**条目**。同一（归一化）条目出现在两个字段里、或在同一字段里写两遍，
+       都算违规。条目可以不是句子——`facts` 里的关键字段片段（`12万`）也算一个载体条目，
+       它同时出现在 `decisions` 里同样是「同一信息项两个载体」。
+    2. **`summary` 不得逐字复述**：判的是**句子**。字段条目先按 `SENTENCE_SPLIT_RE`
+       切成句子，只有归一化后长度 ≥ `SUMMARY_RESTATEMENT_MIN_CHARS` 的才算「一句话」，
+       再检查它是否作为子串出现在 `summary` 里。**片段不算句子**——把片段当句子比会大量误报
+       （规则基线上实测 685 处片段重叠不该算复述）。
     """
     report = Report()
     violations: list[str] = []
@@ -249,11 +267,19 @@ def verify_field_mutual_exclusion(cards: Sequence[Mapping[str, Any]]) -> Report:
 
         summary = normalize(str(card.get("summary") or ""))
         if summary:
-            for key, field_name in owner.items():
-                if key and key in summary:
-                    violations.append(
-                        f"{card_id} summary 逐字复述了 {field_name} 里的句子 → {key[:40]}"
-                    )
+            for field_name in MUTUALLY_EXCLUSIVE_FIELDS:
+                values = card.get(field_name) or ()
+                if isinstance(values, str):
+                    values = (values,)
+                for value in values:
+                    for sentence in SENTENCE_SPLIT_RE.split(str(value)):
+                        key = normalize(sentence)
+                        if len(key) < SUMMARY_RESTATEMENT_MIN_CHARS:
+                            continue
+                        if key in summary:
+                            violations.append(
+                                f"{card_id} summary 逐字复述了 {field_name} 里的句子 → {key[:40]}"
+                            )
 
     if violations:
         report.missing["field_mutual_exclusion"] = violations

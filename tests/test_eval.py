@@ -116,18 +116,18 @@ class GoldLoadingTest(unittest.TestCase):
 
 class EvalGateTest(unittest.TestCase):
     def test_baseline_passes_the_field_gate(self) -> None:
-        """基线在**字段保留**上过门（`1.0000` ≥ `0.98`），但它**违反 C6**。
+        """基线在**字段保留**上过门，且它的 C6 违规因 C6.1 豁免而**不影响判定**。
 
-        v1.3 加入 C6（卡内字段互斥）之后，规则基线不再是「合规模板」：
-        它把同一句话同时写进 `facts` 与 `decisions`/`todos`/`constraints`，
-        实测 `751` 条违规。所以这条测试现在只断言**字段保留那一侧**，
-        并显式断言 C6 违规确实存在——两者都是事实，不该被一条 `assertTrue(report.ok)` 混在一起。
+        v1.3 的 C6 让规则基线违反卡契约（实测 `705` 条），C6.1 又把这条记为
+        `expected_violations`：违规被识别、被计数、被打印，但不判失败。
+        所以这里的断言是「判定通过 + 违规确实存在」——两件事都要钉住。
         """
         report = run_eval(extractor=BaselineExtractor())
+        self.assertTrue(report.ok, report.summary())
+        self.assertIn("PASS", report.summary())
         self.assertGreaterEqual(report.key_field_recall, DEFAULT_MIN_RECALL)
-        violations = [r for r in report.results if r.field_violations]
-        self.assertTrue(violations, "基线按定义违反 C6，这里应当有违规")
-        self.assertFalse(report.ok, "违反 C6 的抽取器不该过门")
+        self.assertGreater(report.expected_violations, 0, "C6.1 是豁免，不是忽略")
+        self.assertEqual(report.field_violations, 0)
 
     def test_lossy_extractor_fails_the_gate(self) -> None:
         """故意不可用的抽取器必须被判失败。
@@ -358,6 +358,49 @@ class RedundancyTest(unittest.TestCase):
                     f"{case.id}：逐字重复句占 {share:.1%} 的字符（上限 "
                     f"{self.MAX_VERBATIM_SHARE:.0%}）→ {dict(list(repeated.items())[:2])}",
                 )
+
+
+class ImpostorExtractor(BaselineExtractor):
+    """行为与基线**完全相同**，只是不叫 `baseline-rules`。
+
+    用来验证 C6.1 的豁免是**按名字**生效的：同样违反 C6，改了名字就必须失败。
+    """
+
+    name = "impostor"
+
+
+class C6ExemptionTest(unittest.TestCase):
+    """C6.1：参照点抽取器的 C6 违规是**预期**，记入 `expected_violations`、不判失败。
+
+    这不是放水，而是把「基线故意违反新契约」写进代码：违规仍被逐条识别与计数，
+    只是不计入退出码；豁免只按名字对基线生效。
+    """
+
+    def test_baseline_c6_exemption(self) -> None:
+        report = run_eval(extractor=BaselineExtractor())
+        self.assertTrue(report.ok, "基线享受 C6.1 豁免，整体判定应为通过")
+        self.assertGreater(report.expected_violations, 0, "基线违规必须被识别，不是被忽略")
+        self.assertEqual(report.field_violations, 0)
+        self.assertTrue(all(not r.expected_violations == [] for r in report.results))
+        self.assertIn("C6.1 基线豁免", report.summary())
+
+    def test_non_baseline_violations_still_fail(self) -> None:
+        """同样违反 C6 的**非基线**抽取器必须失败——豁免不能漏水。"""
+        report = run_eval(extractor=ImpostorExtractor())
+        self.assertFalse(report.ok, "非基线违反 C6 必须判失败")
+        self.assertGreater(report.field_violations, 0)
+        self.assertEqual(report.expected_violations, 0)
+        self.assertIn("C6（卡内字段互斥）违规", report.summary())
+
+    def test_exemption_is_name_based_not_call_site_based(self) -> None:
+        """`run_case` 的显式开关可以覆盖自动判定——两条路都测。"""
+        case = GoldCase(id="unit-c6", messages=["决定采用方案B，成本 12 万。"])
+        auto = run_case(case, ImpostorExtractor())
+        forced = run_case(case, ImpostorExtractor(), is_baseline=True)
+        self.assertFalse(auto.ok)
+        self.assertTrue(auto.field_violations)
+        self.assertEqual(forced.field_violations, [])
+        self.assertTrue(forced.expected_violations)
 
 
 if __name__ == "__main__":

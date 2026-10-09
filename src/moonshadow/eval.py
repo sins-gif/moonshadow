@@ -91,6 +91,20 @@ WORK_DIR = ROOT / ".tmp" / "eval"
 #: 阈值来自 SPEC-v1.1 §9.2。未达标即视为关卡未通过。
 DEFAULT_MIN_RECALL = 0.98
 
+#: **C6.1 基线豁免**（`docs/v1.3-spec.md` §2 C6.1）：被指定为参照点的抽取器，
+#: 其 C6 违规记入 `CaseResult.expected_violations`，**不作为失败条件**。
+#: 理由：基线的存在意义就是展示「不遵守契约的形状是什么样的」，它必须保持原地不动；
+#: 修它会让 v1.2 与 v1.3 失去可比性。**豁免只对这些名字生效**——任何其他抽取器
+#: （stub、Phase 2 的 LLM）的 C6 违规仍然让 `run_eval` 退出 `1`。
+#: 按名字而不是按调用点识别：这样「谁被豁免」写在数据里，不靠调用方自觉。
+BASELINE_IDENTIFIERS: tuple[str, ...] = ("baseline-rules",)
+
+
+def is_baseline_extractor(extractor: object) -> bool:
+    """该抽取器是否属于被指定为参照点、因而享受 C6.1 豁免的那一类。"""
+    name = getattr(extractor, "name", type(extractor).__name__)
+    return str(name) in BASELINE_IDENTIFIERS
+
 
 @dataclass
 class GoldCase:
@@ -175,9 +189,18 @@ class CaseResult:
     uncarried: list[str] = field(default_factory=list)
     #: 违反 C6（卡内字段互斥）的条目。见 `verify.verify_field_mutual_exclusion`。
     field_violations: list[str] = field(default_factory=list)
+    #: C6.1 豁免：被指定为参照点的抽取器（基线）的 C6 违规记在这里，不计入失败。
+    expected_violations: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         verdict = "PASS" if self.ok else "FAIL"
+
+        def brief(items: list[str], limit: int = 2) -> str:
+            """违规清单可能上百条；打印前几条 + 总数，否则一次冒烟会刷掉几百行。"""
+            if len(items) <= limit:
+                return str(items)
+            return f"{items[:limit]}…（共 {len(items)} 条）"
+
         head = (
             f"{verdict}  {self.case_id:<28} 保留率={self.recall:.3f} "
             f"压缩率={self.compression:.3f}x 卡数={self.cards} "
@@ -185,11 +208,16 @@ class CaseResult:
         )
         details = []
         if self.lost:
-            details.append(f"丢字段={self.lost}")
+            details.append(f"丢字段={brief(list(self.lost.values()))}")
         if self.field_violations:
-            details.append(f"C6 字段互斥违规={self.field_violations}")
+            details.append(f"C6 字段互斥违规={brief(self.field_violations)}")
+        if self.expected_violations:
+            details.append(
+                f"C6 违规（预期，C6.1 基线豁免 {len(self.expected_violations)} 条）="
+                f"{brief(self.expected_violations, 1)}"
+            )
         if self.uncarried:
-            details.append(f"定性内容无载体={self.uncarried}")
+            details.append(f"定性内容无载体={brief(self.uncarried)}")
         if self.missing_expected:
             details.append(f"缺预期字段={self.missing_expected}")
         if self.missing_tiers:
@@ -232,6 +260,16 @@ class EvalReport:
         raw = sum(r.raw_tokens for r in self.results)
         cards = sum(r.card_tokens for r in self.results)
         return raw / cards if cards else 0.0
+
+    @property
+    def expected_violations(self) -> int:
+        """C6.1 豁免掉的违规条数（参照点抽取器）。**打印出来，不静默。**"""
+        return sum(len(r.expected_violations) for r in self.results)
+
+    @property
+    def field_violations(self) -> int:
+        """真正导致失败的 C6 违规条数。"""
+        return sum(len(r.field_violations) for r in self.results)
 
     def tier_stats(self) -> list[TierStat]:
         """把逐用例的层级读数合并成 T0–T9 全表（未出现的层级保留 0 值行）。"""
@@ -293,6 +331,17 @@ class EvalReport:
             f"用例 {sum(1 for r in self.results if r.ok)}/{len(self.results)} 通过"
         )
         lines.extend(self.tier_table())
+        if self.expected_violations:
+            lines.append(
+                f"C6.1 基线豁免：C6 违规 {self.expected_violations} 条（**预期**）——"
+                "参照点抽取器按定义不遵守 v1.3 的卡契约，它保持原地不动；"
+                "豁免只对它生效，见 `eval.BASELINE_IDENTIFIERS` 与 spec C6.1。"
+            )
+        if self.field_violations:
+            lines.append(
+                f"FAIL  C6（卡内字段互斥）违规 {self.field_violations} 条："
+                "同一句话只能有一个载体字段，`summary` 不得逐字复述（spec C6）。"
+            )
         if self.compression_ratio < 1.0 or self.weighted_compression < 1.0:
             lines.append(
                 "WARN  压缩率 < 1.0：抽取器在**膨胀** token。PASS 只说明没丢字段，"
@@ -345,8 +394,14 @@ def run_case(
     *,
     session_id: str | None = None,
     workdir: str | pathlib.Path | None = None,
+    is_baseline: bool | None = None,
 ) -> CaseResult:
-    """跑一条金标准：写入原文 → 压缩 → 校验关键字段与预期层级 → 算压缩率。"""
+    """跑一条金标准：写入原文 → 压缩 → 校验关键字段与预期层级 → 算压缩率。
+
+    ``is_baseline=None`` 时按抽取器的 `name` 自动判定（见 `BASELINE_IDENTIFIERS`）：
+    基线享受 C6.1 豁免，其 C6 违规进 `expected_violations` 而不是 `field_violations`。
+    显式传 `is_baseline` 可以覆盖——测试用它钉住「豁免只对基线生效」。
+    """
     session = session_id or f"gold-{case.id}"
     work = pathlib.Path(workdir) if workdir is not None else WORK_DIR / case.id
     shutil.rmtree(work, ignore_errors=True)
@@ -391,12 +446,15 @@ def run_case(
         raw_tokens = sum(estimate_tokens(text) for text in case.messages)
         card_tokens = sum(estimate_tokens(card_text_many([card])) for card in cards) or 1
         tier_stats, shared = _tier_stats(cards, store)
+        # C6.1：参照点抽取器的 C6 违规是**预期**，记在另一个字段里、不判失败。
+        exempt = is_baseline_extractor(extractor) if is_baseline is None else is_baseline
+        violations = list(mutual.missing.get("field_mutual_exclusion", []))
         return CaseResult(
             case_id=case.id,
             ok=(
                 report.ok
                 and qualitative.ok
-                and mutual.ok
+                and (exempt or not violations)
                 and not missing_expected
                 and not missing_tiers
             ),
@@ -413,7 +471,8 @@ def run_case(
             tier_stats=tier_stats,
             shared_sources=shared,
             uncarried=list(qualitative.missing.get("qualitative", [])),
-            field_violations=list(mutual.missing.get("field_mutual_exclusion", [])),
+            field_violations=[] if exempt else violations,
+            expected_violations=violations if exempt else [],
         )
     except Exception as exc:  # 单条用例异常不应掩盖其他用例的结果
         return CaseResult(

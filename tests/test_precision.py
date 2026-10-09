@@ -254,11 +254,24 @@ class FieldMutualExclusionTest(unittest.TestCase):
 
     def test_rejects_summary_restating_a_field_sentence(self) -> None:
         """C6 的第二条：summary 不得逐字复述字段里的句子——否则它只堵了一半。"""
+        sentence = "决定先做读缓存，写路径这一轮完全不动。"
         report = verify_field_mutual_exclusion(
-            [{"summary": "决定先做读缓存。", "decisions": ["决定先做读缓存。"]}]
+            [{"summary": sentence, "decisions": [sentence]}]
         )
         self.assertFalse(report.ok)
         self.assertIn("summary 逐字复述", "".join(report.missing["field_mutual_exclusion"]))
+
+    def test_summary_restatement_check_ignores_fragments(self) -> None:
+        """**边界**（漏洞 #10）：判的是句子，**片段不算**。
+
+        `summary` 里出现 `12万` 这种字段片段不算「复述整句」。规则基线上实测有
+        `685` 处这类片段重叠——把它们算成违规会让判据变成误报机器。
+        代价是片段级复述逃得出这条判据，那是 C6 的已知缺口，记在 `v1.3-spec.md` §6.2。
+        """
+        report = verify_field_mutual_exclusion(
+            [{"summary": "本周要点：12万。", "facts": ["12万"]}]
+        )
+        self.assertTrue(report.ok, "片段不是句子，不该判违规")
 
     def test_summary_may_use_its_own_words(self) -> None:
         """不复述就不算违规——判据只拦「同一句话写两遍」，不拦真正的概述。"""
