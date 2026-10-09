@@ -310,12 +310,22 @@ class SummarySubstanceTest(unittest.TestCase):
         self.assertIn("未提及", joined)
 
     def test_overlong_summary_is_rejected(self) -> None:
-        """摘要超过字段 token 的 40% 就不是概述，是第二份字段。"""
+        """超过 40% **且漏了要点**才拒——C8.3 规定提及优先于上限。"""
         report = verify_summary_substance(
-            [{**self.CARD, "summary": "决定先做读缓存写路径这一轮完全不动后面按这个方向排期张三负责压测报告两周内给出第一版"}]
+            [{**self.CARD, "summary": "决定先做读缓存写路径这一轮完全不动后面按这个方向排期"}]
         )
         self.assertFalse(report.ok)
-        self.assertIn("过长", "".join(report.missing["summary_substance"]))
+        self.assertIn("未提及", "".join(report.missing["summary_substance"]))
+
+    def test_summary_long_but_covered_passes(self) -> None:
+        """**C8.3**：超 40% 但覆盖全部要点 → 通过（上限放宽到覆盖所需长度，不算违约）。"""
+        card = {
+            "summary": "决定先做读缓存写路径这一轮完全不动；张三负责压测报告",
+            "decisions": ["决定先做读缓存，写路径这一轮完全不动。"],
+            "todos": ["张三负责压测报告。"],
+        }
+        report = verify_summary_substance([card])
+        self.assertTrue(report.ok, report.summary())
 
 
 if __name__ == "__main__":

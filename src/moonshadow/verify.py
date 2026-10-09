@@ -336,6 +336,15 @@ def verify_summary_substance(cards: Sequence[Mapping[str, Any]]) -> Report:
             for field_name in MUTUALLY_EXCLUSIVE_FIELDS
             for value in (card.get(field_name) or ())
         )
+        # 先算「提及」，再判长度：**C8.3 规定提及优先于上限**。
+        missed: list[str] = []
+        for field_name in ("decisions", "todos", "constraints"):
+            for value in card.get(field_name) or ():
+                key = normalize(str(value))
+                if key and not _shared_fragment(summary, key, SUMMARY_MENTION_CHARS):
+                    missed.append(
+                        f"{card_id} summary 未提及 {field_name} 里的一条要点 → {key[:30]}"
+                    )
         if field_tokens:
             summary_tokens = estimate_tokens(raw_summary)
             low = SUMMARY_SHARE_MIN * field_tokens
@@ -345,18 +354,14 @@ def verify_summary_substance(cards: Sequence[Mapping[str, Any]]) -> Report:
                     f"{card_id} summary 过短：{summary_tokens} tok < 字段合计 {field_tokens} 的 "
                     f"10%（{low:.1f}）→ {summary[:30] or '（空）'}"
                 )
-            elif summary_tokens > high:
+            elif summary_tokens > high and missed:
+                # C8.3：超过上限**本身不违约**（上限放宽到覆盖所需长度）；
+                # 只有「超上限 **且** 没覆盖全部要点」才是违规——不许为了压长度丢要点。
                 violations.append(
-                    f"{card_id} summary 过长：{summary_tokens} tok > 字段合计 {field_tokens} 的 "
-                    f"40%（{high:.1f}）"
+                    f"{card_id} summary 过长且未覆盖全部要点：{summary_tokens} tok > 字段合计 "
+                    f"{field_tokens} 的 40%（{high:.1f}），漏了 {len(missed)} 条要点"
                 )
-        for field_name in ("decisions", "todos", "constraints"):
-            for value in card.get(field_name) or ():
-                key = normalize(str(value))
-                if key and not _shared_fragment(summary, key, SUMMARY_MENTION_CHARS):
-                    violations.append(
-                        f"{card_id} summary 未提及 {field_name} 里的一条要点 → {key[:30]}"
-                    )
+        violations.extend(missed)
     if violations:
         report.missing["summary_substance"] = violations
     return report
