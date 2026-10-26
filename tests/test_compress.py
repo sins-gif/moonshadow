@@ -21,7 +21,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from moonshadow import FixedClock, Store  # noqa: E402
-from moonshadow.extractor import parse_llm_cards  # noqa: E402
+from moonshadow.extractor import BatchDiagnostics, parse_llm_cards  # noqa: E402
 from moonshadow.compress import (  # noqa: E402
     BaselineExtractor,
     build_prompt,
@@ -188,6 +188,35 @@ class PromptAndLabelTest(unittest.TestCase):
             label_to_id={"m1": "src_a"},
         )
         self.assertEqual(cards[0].source_ids, ["src_a", "m9"])
+
+    def test_llm_format_slips_are_normalised_and_counted(self) -> None:
+        """全量 25 条实测到的三处**格式滑落**：裸数字 `tier`、非数字 `confidence`、
+        markdown 围栏。三者都归一/降级并计数——**格式归一不是语义猜测**：
+        `tier` 的下标由协议给定，`confidence` 不可解析时只能置 `None`。
+
+        第一轮实测的代价写在这里当护栏：解析层不归一裸数字 `tier` 时直接 `KeyError`，
+        一整批卡全丢（14 条用例的读数变成 0）。"""
+        diagnostics = BatchDiagnostics()
+        cards = parse_llm_cards(
+            '```json\n[{"tier": 3, "summary": "s", "confidence": "high"}]\n```',
+            diagnostics,
+        )
+        self.assertEqual(cards[0].tier, "T3")
+        self.assertIsNone(cards[0].confidence)
+        self.assertEqual(diagnostics.tier_as_number, 1)
+        self.assertEqual(diagnostics.non_numeric_confidence, 1)
+        self.assertEqual(diagnostics.fenced_payload, 1)
+        # 归一只发生在「协议里有这把尺子」的地方：不认识的层级字符串**原样保留**，
+        # 由派生字段（`to_draft` 查 `TIER_IMPORTANCE`）响亮地抛——解析层不替契约猜层级。
+        unknown = parse_llm_cards('[{"tier": "high", "summary": "s"}]')
+        self.assertEqual(unknown[0].tier, "high")
+        with self.assertRaises(KeyError):
+            unknown[0].to_draft()
+
+    def test_llm_fenced_payload_that_is_not_json_still_raises(self) -> None:
+        """剥围栏只解决外壳：壳里的内容不是 JSON 时照样抛（不猜、不修补）。"""
+        with self.assertRaises(json.JSONDecodeError):
+            parse_llm_cards("```json\n{这不是数组}\n```")
 
 
 if __name__ == "__main__":

@@ -147,6 +147,17 @@ class BatchDiagnostics:
     #: 它是**上界**：有交集不一定真重叠，没有交集一定不重叠。用于回答
     #: 「C6 机械通过 ≠ 语义通过」，也是 OQ 议题的输入数据。
     facts_decisions_overlap_candidates: int = 0
+    #: LLM 把 `tier` 写成**裸数字**（`3` 而不是 `"T3"`）的卡数。解析层按 `T{n}` 归一。
+    #: 这不是猜语义：层级词汇表由协议给定（`T0`…`T9`），数字就是它的下标，映射不丢信息。
+    #: 实测出处：25 条全链路一轮里 14 条用例踩到（当时解析层直接 `KeyError`，
+    #: 一整批卡全丢——**格式没归一，代价是整批数据**，见 §6.7）。
+    tier_as_number: int = 0
+    #: `confidence` 不是数字（实测出现过 `"high"`）的卡数。降级为 `None`。
+    #: 不编一个数出来：编出来的置信度会被下游当成读数用，那不是降级是**造假**。
+    non_numeric_confidence: int = 0
+    #: LLM 返回被 markdown 代码围栏包住的批次数（实测 55 批里 1 批）。
+    #: 剥离围栏是格式归一，剥完仍是原文：内容解析失败照样抛。
+    fenced_payload: int = 0
 
 
 _LAST_BATCH_DIAGNOSTICS: list[BatchDiagnostics] = []
@@ -384,25 +395,40 @@ def parse_llm_cards(
 ) -> list[MemoryCard]:
     """LLM 分支：raw 文本 → `list[MemoryCard]`。**接口签名从真实输出里长出来的**。
 
-    三批真实 dump 定下的四条事实（不是推测）：
+    全量 25 条（`tools/run_llm_probe.py --pipeline`，55 批）定下的七条事实（不是推测）：
 
-    1. **整体是合法 JSON 数组**：无 markdown 代码块、无解释性前言（三批 0 例外），
-       所以解析层不需要剥离外壳。哪天出现外壳，这里要加剥离——那属于接口的一部分。
+    1. **整体是合法 JSON 数组**，但**不保证没有 markdown 围栏**：前三批 0 例外，
+       全量 55 批出现 **1 批**（`17-data-pipeline` 第 2 批）。所以解析层现在剥离围栏
+       （`container.fenced_payload` 计数）——剥离是格式归一，剥完内容解析失败照样抛。
     2. **`claims` 是字符串数组**，而 `cards.make_card` 要的是对象数组（按 `claim["kind"]` 取键）。
        **决策：显式降级**——str claim 原样进 `facts`，`unstructured_claims` 计数；
        不猜 `kind`/`predicate`、不构造对象。`claims` 字段本身不进 `MemoryCard`（置空）。
        理由：`kind` 是语义判断（decision/opinion/todo），规则版猜不准，猜错是**静默错标**；
        宁可降级，不可猜错。降级不触发 C6（`facts` 本就是陈述句容器），C1 追溯路径不变。
+       （全量一轮里这条降级**一次也没触发**：新版提示词给了 `claims` 的对象示例。）
     3. **LLM 会用满 `network` 四类**（`observation` 出现 3 次），而规则版 `baseline_network`
        永不输出 `observation`。所以 `network` 分布是**抽取器相关的**，不是不变量。
     4. **`summary` 长度跨度极大**（16–233 字符），C8 的长度条款会在这里第一次被压到。
+    5. **`tier` 有时是裸数字**（`3` 而非 `"T3"`，55 批里 14 条用例踩到）。
+       按 `T{n}` 归一 + `tier_as_number` 计数：层级词汇表由协议给定，数字是它的下标，
+       映射不丢信息；不归一的代价是整批卡丢光（第一轮实测）。
+    6. **`confidence` 有时不是数字**（实测 `"high"`）：降级为 `None` + `non_numeric_confidence`
+       计数。不编一个数——编出来的置信度会被下游当读数用。
+    7. **`tier` 缺失是 KeyError、层级字符串不认识是 KeyError**：这两类**保持响亮**。
+       格式归一与语义猜测的分界是：**协议里已有这把尺子**（下标、`None`）才归一，
+       没有尺子（`kind` 该填什么）就不猜。
 
-    参数 `diagnostics` 用于把降级计数写到既有的批次诊断里；不传则新建一个。
+    参数 `diagnostics` 用于把上述计数写到既有的批次诊断里；不传则新建一个。
     **`label_to_id` 是接口的一部分**：LLM 输出的 `source_ids` 是提示词局部标签（`m1`…`mN`），不是 store id；
     不映射就会让 C1 把每条消息判成「无载体」。映射不到的标签原样保留（不静默丢弃）。
     """
     container = diagnostics if diagnostics is not None else BatchDiagnostics()
-    payload = json.loads(raw_text)
+    text = raw_text.strip()
+    if text.startswith("```"):
+        body = text.split("```")[1]
+        text = body.split("\n", 1)[1] if "\n" in body else body
+        container.fenced_payload += 1
+    payload = json.loads(text)
     if not isinstance(payload, list):
         raise ValueError(f"LLM 输出顶层不是数组，而是 {type(payload).__name__}")
 
@@ -430,9 +456,20 @@ def parse_llm_cards(
             mine = _hard_set(sentence)
             if mine and any(mine & other for other in other_sets):
                 container.facts_decisions_overlap_candidates += 1
+        # 格式归一：裸数字 tier → `T{n}`（协议词汇表已给定，数字是下标）
+        tier = str(item["tier"])
+        if tier.isdigit():
+            container.tier_as_number += 1
+            tier = f"T{tier}"
+        confidence: float | None = None
+        if item.get("confidence") is not None:
+            try:
+                confidence = float(item["confidence"])
+            except (TypeError, ValueError):
+                container.non_numeric_confidence += 1  # 降级为「没有这个值」，不编数
         cards.append(
             MemoryCard(
-                tier=str(item["tier"]),
+                tier=tier,
                 summary=str(item.get("summary") or ""),
                 source_ids=[
                     str((label_to_id or {}).get(str(value), str(value)))
@@ -446,9 +483,7 @@ def parse_llm_cards(
                 constraints=[str(value) for value in item.get("constraints") or ()],
                 entities=[str(value) for value in item.get("entities") or ()],
                 keywords=[str(value) for value in item.get("keywords") or ()],
-                confidence=(
-                    float(item["confidence"]) if item.get("confidence") is not None else None
-                ),
+                confidence=confidence,
             )
         )
     container.cards = len(cards)
