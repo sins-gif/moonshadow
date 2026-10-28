@@ -239,7 +239,7 @@ moonshadow/
 ├── .gitattributes       `* -text`: disables newline conversion (otherwise the frozen holdout hashes all break after checkout)
 ├── schema.json          memory-card JSON Schema (enforced validation, additionalProperties=false)
 ├── ddl.sql              SQLite DDL: card / claim / source / card_source / cursor / entity*
-├── docs/                12 files: 4 current + 1 v1.3 draft + 1 authoritative + index + idea backlog + 4 historical (see below)
+├── docs/                13 files: 4 current + 2 v1.3 drafts + 1 authoritative + index + idea backlog + 4 historical (see below)
 ├── src/moonshadow/      17 files / 16 modules (standard library only)
 ├── tools/               16 executables = 15 release-verification commands + 1 Phase 2 probe
 │                        (run_llm_probe.py needs a local LLM key; it is not part of release verification)
@@ -259,6 +259,7 @@ docs/                   ordered by version number; the filename prefix makes lex
   v1.2-roadmap.md       reserved proposals (grouped f, adaptive h) and the §7.1 batch-acceptance rules R1/R2/R3
   v1.2-candidates.md    v1.2 proposal evaluation: item-by-item disposition, conflicts with existing evidence, re-split, v1.2-A measurements
   v1.3-spec.md          v1.3 **draft** (not sealed): the C1–C8.3 contracts, Phase 1 closure and the Phase 2 entry criteria
+  v1.3-freeze-report.md v1.3 freeze report and backlog: handover summary and restart signals (no new conclusions)
   v1.1-spec.md          ┐
   v1.1-weights.md       │ historical versions · records of the thinking process (kept alongside the current
   v1.1-summary.md       │ ones; **their data is not to be relied on** — read them to trace the reasoning chain)
