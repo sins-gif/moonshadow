@@ -18,7 +18,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 - **Documentation index / where to start**: `docs/README.md` ← authority map, reading order, maintenance rules
 - Technical report (evidence): `docs/v1.2-weights.md` ｜ Handover overview: `docs/v1.2-summary.md`
 - Reserved proposals and batch-acceptance rules: `docs/v1.2-roadmap.md` ｜ Proposal evaluation: `docs/v1.2-candidates.md`
-- **Next-version draft (not implemented)**: `docs/v1.3-spec.md` ← Phase 1 interface contract only (C1–C4 settled, Q1–Q3 open)
+- **Next version (frozen as `v1.3-experimental`)**: `docs/v1.3-spec.md` (contracts C1–C8.3, Phase 1 closure, Phase 2 criteria and the first full reading) ｜ freeze report and backlog: `docs/v1.3-freeze-report.md`
 - **Historical versions (records of the thinking process; their data is not to be relied on)**: `docs/v1.1-*.md`, `docs/v1.0-moonshadow.md`
 - Data contract: `schema.json` ｜ DDL: `ddl.sql`
 
@@ -394,8 +394,15 @@ access billing and tier promotion/demotion.
 the holdout set must not be modified (enforced by `run_split_integrity.py`); and a case's `exclude` entries are **assertions**,
 which must really be blocked by the production gate with a `reason` matching the actual rule (enforced by `run_gate_audit.py`).
 
-**Not implemented yet** (the contracts are fixed; see `docs/v1.2-spec.md` §12): a callable LLM extractor
-(the current compression ratio is `0.498x`, inflating tokens), an intent classifier (`time_sensitivity` relies only on a hand-written word list,
+**v1.3 (frozen as `v1.3-experimental`)**: the C1–C8.3 contracts and their guards landed; the full 25-case LLM reading
+(retention `1.0000`, compression `0.7359x`, `todos` hard-point misses `25/70`); the Phase 2 criteria were rebuilt as
+"per-tier + information-item" (`docs/v1.3-spec.md` §4.1), and `OQ4` (density crowding and the logical clock) was logged in §6.4.
+The next piece of work, the cross-batch information-item registry, is in `docs/backlog.md` and `docs/v1.3-freeze-report.md`.
+
+**Not implemented yet** (the contracts are fixed; see `docs/v1.2-spec.md` §12): **wiring the LLM extractor into the production path** —
+the LLM can already drive the whole chain (`tools/run_llm_probe.py --pipeline`; over all 25 gold cases: retention `1.0000`,
+compression `0.7359x`, **still inflating**, see `docs/v1.3-spec.md` §6.7), but the production path is still the rule baseline;
+an intent classifier (`time_sensitivity` relies only on a hand-written word list,
 and the experiments have exposed its ceiling), FTS5/vector retrieval wiring, entity resolution, a conflict detector, an MCP server,
 daily checks and retention cleanup, and encryption.
 

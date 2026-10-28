@@ -18,7 +18,7 @@
 - **文档索引 / 从哪读起**：`docs/README.md` ← 权威分工、阅读顺序、维护规则
 - 技术报告（证据）：`docs/v1.2-weights.md` ｜ 交接总览：`docs/v1.2-summary.md`
 - 储备方案与批次验收规则：`docs/v1.2-roadmap.md` ｜ 提案评估：`docs/v1.2-candidates.md`
-- **下一版草案（未实现）**：`docs/v1.3-spec.md` ← 只写 Phase 1 的接口契约（已定 C1–C4、待拍板 Q1–Q3）
+- **下一版（已封存为 `v1.3-experimental`）**：`docs/v1.3-spec.md`（契约 C1–C8.3、Phase 1 收口、Phase 2 判据与首份全量读数）｜ 封存报告与 Backlog：`docs/v1.3-freeze-report.md`
 - **历史版本（思考过程记录，数据不作为依据）**：`docs/v1.1-*.md`、`docs/v1.0-moonshadow.md`
 - 数据契约：`schema.json` ｜ 建表语句：`ddl.sql`
 
@@ -394,8 +394,15 @@ assert store.get_raw(sid) == "客户说预算 12 万，截止 2026-10-15。"
 留出集不得修改（`run_split_integrity.py` 强制）；用例的 `exclude` 是**断言**，
 必须真的被生产门挡住且 `reason` 与实际规则一致（`run_gate_audit.py` 强制）。
 
-**尚未实现**（契约已定，见 `docs/v1.2-spec.md` §12）：可调用的 LLM 抽取器接入
-（当前压缩率 `0.498x`，在膨胀 token）、意图分类器（`time_sensitivity` 只靠人工词表，
+**v1.3（已封存为 `v1.3-experimental`）**：C1–C8.3 契约与守卫落地；全量 25 条 LLM 读数
+（保留率 `1.0000`、压缩 `0.7359x`、`todos` 硬要点漏 `25/70`）；Phase 2 判据改成
+「分层 + 信息项」（`docs/v1.3-spec.md` §4.1），并在 §6.4 登记了 `OQ4`（密度挤兑与逻辑时钟）。
+下一个工程件「跨批信息项注册表」见 `docs/backlog.md` 与 `docs/v1.3-freeze-report.md`。
+
+**尚未实现**（契约已定，见 `docs/v1.2-spec.md` §12）：**把 LLM 抽取器接进生产路径**——
+LLM 已能全链路驱动（`tools/run_llm_probe.py --pipeline`；全量 25 条实测保留率 `1.0000`、
+压缩率 `0.7359x`，**仍在膨胀**，见 `docs/v1.3-spec.md` §6.7），但生产路径仍是规则基线；
+意图分类器（`time_sensitivity` 只靠人工词表，
 实验已暴露其天花板）、FTS5/向量检索接线、实体消解逻辑、冲突检测器、MCP Server、
 日检与保留清理任务、加密。
 
