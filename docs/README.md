@@ -25,9 +25,9 @@
    │                                                                   │
    │   README.md（本索引） ｜ backlog.md（想法池：重要但不做）           │
    └───────────────────────────────────────────────────────────────────┘
-   ┌─ 草案（尚未实现，仍以 v1.2-spec.md 为准）─────────────────────────┐
-   │  v1.3-spec.md ｜ 契约 C1–C8.3、Phase 1 收口、Phase 2 判据与读数    │
-   │  v1.3-freeze-report.md ｜ 封存报告与 Backlog（交接摘要，不引入新结论）│
+   ┌─ v1.2.x Roadmap（实验性探索：未实现，仍以 v1.2-spec.md 为准）────────┐
+   │  v1.2-future-llm-extractor.md ｜ 契约 C1–C8.3、Phase 1 收口、Phase 2 判据与读数    │
+   │  v1.2-future-llm-extractor-freeze.md ｜ 封存报告与 Backlog（交接摘要，不引入新结论）│
    └───────────────────────────────────────────────────────────────────┘
    ┌─ 历史（思考过程记录，数据不作为依据）──────────────────────────────┐
    │  v1.1-spec.md ｜ v1.1-weights.md ｜ v1.1-summary.md ｜ v1.0-...   │
@@ -45,7 +45,7 @@
 | 质疑某个结论凭什么成立 | [`v1.2-weights.md`](v1.2-weights.md) | 技术报告：定理与证明、实验数据、证据强度分级 |
 | 想知道某条路为什么被否决 | [`v1.2-candidates.md`](v1.2-candidates.md) | 提案逐条评估（可保留 / 需修正 / 与证据冲突） |
 | 想知道下一版做什么、还缺什么 | [`v1.2-roadmap.md`](v1.2-roadmap.md) | 储备方案与**批次验收规则**（§7.1 的 R1/R2/R3） |
-| **准备动 v1.3 的接口** | [`v1.3-spec.md`](v1.3-spec.md) | **草案**：只写 Phase 1 契约（已定 C1–C4、待拍板 Q1–Q3）；不描述已实现的系统 |
+| **准备动 v1.2.x Roadmap 的接口** | [`v1.2-future-llm-extractor.md`](v1.2-future-llm-extractor.md) | **实验性探索**：契约 C1–C8.3、Phase 1 收口、Phase 2 判据与首份全量读数；不描述已实现的系统 |
 | **有个重要但今天不该做的想法** | [`backlog.md`](backlog.md) | **想法池**：记下想法与它的前置条件；不构成承诺 |
 | 查某个数字是怎么算出来的 | 工具输出 | 数值准绳是工具，不是散文（见 §3） |
 | **想知道当初是怎么想的** | [`v1.1-*`](v1.1-weights.md)、[`v1.0-moonshadow.md`](v1.0-moonshadow.md) | **历史版本 · 思考过程记录**；数据不作为依据 |
@@ -86,8 +86,10 @@
    今天看「不一致」属正常；允许追加状态标注，**不得改写其中的结论与数字**。
    现行文档引用它们时，同一行必须写明其历史地位（`audit_docs.py` 会检查这一点）。
 5. **文档必须被分类。** `docs/` 下每份 `.md` 要么是索引、要么前缀是现行版本 `v1.2`、
-   要么前缀已登记在 `audit_docs.py` 的 `HISTORICAL_PREFIXES` 里。升版时把旧前缀挪进去——
-   这是一个有意动作，不会自动发生。
+   要么前缀已登记在 `audit_docs.py` 的 `HISTORICAL_PREFIXES` 里。
+   **实验性探索文档**（`v1.2.x Roadmap`，文件名也在 `v1.2-` 前缀下）按**文件名显式登记**在
+   `EXPERIMENTAL`——它们不能靠前缀自动归类，否则会被当成「现行」而要求承担已实现系统的数值准绳。
+   升版时把旧前缀挪进 `HISTORICAL_PREFIXES`：这是一个有意动作，不会自动发生。
 6. **加了文档就登记本索引**（§5 清单），否则 `tools/audit_docs.py` 会判违规。
 7. 改完文档跑：`python tools/audit_docs.py` 与 `python -m unittest discover -s tests`。
 
@@ -100,8 +102,8 @@
 | `v1.2-weights.md` | 现行 | 技术报告：定理、证明、实验与证据分级 |
 | `v1.2-candidates.md` | 现行 | 提案逐条评估 |
 | `v1.2-roadmap.md` | 现行 | 储备方案、分组 `f` 求解程序、批次验收规则 |
-| `v1.3-spec.md` | **草案** | v1.3 契约 C1–C8.3、Phase 1 收口、Phase 2 判据与首份全量读数 |
-| `v1.3-freeze-report.md` | **草案** | v1.3 封存报告与 Backlog：交接摘要与重启信号（不引入新结论） |
+| `v1.2-future-llm-extractor.md` | **实验性探索** | v1.2.x Roadmap 契约 C1–C8.3、Phase 1 收口、Phase 2 判据与首份全量读数 |
+| `v1.2-future-llm-extractor-freeze.md` | **实验性探索** | v1.2.x Roadmap 封存报告与 Backlog：交接摘要与重启信号（不引入新结论） |
 | `backlog.md` | **活文档** | **想法池**：重要但现在不该做的架构想法，附前置条件 |
 | `README.md` | 活文档 | 本索引（你正在读的这份） |
 | `v1.1-spec.md` | **历史版本** | v1.1 协议（思考过程记录，数据不作为依据） |

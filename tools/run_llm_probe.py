@@ -72,10 +72,10 @@ from moonshadow.verify import (  # noqa: E402
 
 OUT_DIR = ROOT / ".tmp" / "llm_probe"
 
-#: 契约补丁：把 v1.3 的卡契约随提示词一起给模型，否则测的不是「LLM 天然怎么做」，
+#: 契约补丁：把 v1.2.x Roadmap 的卡契约随提示词一起给模型，否则测的不是「LLM 天然怎么做」，
 #: 而是「它在不知道规则时怎么做」。两条都要看，所以本轮把契约写进提示词。
 CONTRACT_NOTE = """
-额外硬约束（v1.3 卡契约，必须遵守）：
+额外硬约束（v1.2.x Roadmap 卡契约，必须遵守）：
 - 一张卡内，同一句话只能出现在 facts/decisions/todos/constraints 中的一个字段里（C6）。
 - summary 是对整张卡的概述，不得逐字复述上述字段里的任何句子（C6）；
   并且必须覆盖 decisions 的全部要点、提及 todos/constraints 的每一项（C8）。
@@ -263,7 +263,7 @@ def analyse_shape(raw: str, messages: Sequence[str]) -> dict[str, Any]:
 class LLMExtractor:
     """把 LLM 适配成管线认识的 `Extractor`。**一次调用 = 一个请求 = 一批。**
 
-    三个接口事实由它自己承担（契约没规定，见 `docs/v1.3-spec.md` §6）：
+    三个接口事实由它自己承担（契约没规定，见 `docs/v1.2-future-llm-extractor.md` §6）：
 
     1. **管线不把 prompt 递给抽取器**（`compile_session` 自己也算了一份又扔掉），
        所以提示词在这里按同一模板重建——两处必须是同一份模板，否则测的不是管线。
@@ -467,7 +467,7 @@ def run_pipeline(cases: Sequence[GoldCase], *, dry_run: bool, replay: bool) -> i
         print(f"      ⚠ 解析失败：{line}")
 
     print()
-    print("【Phase 2 六条判据（docs/v1.3-spec.md §4.1，口径见 §4.1.1/§4.1.2）】")
+    print("【Phase 2 六条判据（docs/v1.2-future-llm-extractor.md §4.1，口径见 §4.1.1/§4.1.2）】")
     # 第 5 条：分层压缩（唯一归属口径）。保留组 T0/T1 允许 1.0x–1.2x，压缩组 T3–T7 要 >= 2.0x。
     def ratio(tier: str) -> float | None:
         raw, card = tier_unique.get(tier, [0, 0])

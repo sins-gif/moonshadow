@@ -118,7 +118,7 @@ class EvalGateTest(unittest.TestCase):
     def test_baseline_passes_the_field_gate(self) -> None:
         """基线在**字段保留**上过门，且它的 C6 违规因 C6.1 豁免而**不影响判定**。
 
-        v1.3 的 C6 让规则基线违反卡契约（实测 `705` 条），C6.1 又把这条记为
+        v1.2.x Roadmap 的 C6 让规则基线违反卡契约（实测 `705` 条），C6.1 又把这条记为
         `expected_violations`：违规被识别、被计数、被打印，但不判失败。
         所以这里的断言是「判定通过 + 违规确实存在」——两件事都要钉住。
         """
@@ -284,7 +284,7 @@ class TierReadingTest(unittest.TestCase):
 class RedundancyTest(unittest.TestCase):
     """「跨消息冗余」必须是可机检的结构，不能是口头声明。
 
-    理由直接决定 v1.3 的核心目标能不能成立：压缩率的定义是「原文 token / 卡 token」，
+    理由直接决定 v1.2.x Roadmap 的核心目标能不能成立：压缩率的定义是「原文 token / 卡 token」，
     原文里没有可被抽象的冗余时，任何抽取器都做不到 > 1x。若这些长用例的「冗余」
     只写在 `note` 里，压缩率会好看而不可信。
 

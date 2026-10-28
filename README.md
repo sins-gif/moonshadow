@@ -12,15 +12,17 @@
 
 > **本版是数据驱动的参数收敛版**：`f = 0.5925`、`θ = θ′ = 0.3941`、默认方案乘性；
 > `T9` 走负例覆盖（该缺口记录在案）。封版读数：**14 条命令全部退出码 `0`**——其中 `run_eval.py` 的读法是：度量与过门均通过，
-> 且**基线违反 C6 的 705 条被逐条识别并豁免**（C6.1，见 `docs/v1.3-spec.md` §2）。
+> 且**基线违反 C6 的 705 条被逐条识别并豁免**（C6.1，见 `docs/v1.2-future-llm-extractor.md` §2）。
 
 - 现行协议（**动手前先读这份**）：**`docs/v1.2-spec.md`** ← 定义、契约与**定值参数**
 - **文档索引 / 从哪读起**：`docs/README.md` ← 权威分工、阅读顺序、维护规则
 - 技术报告（证据）：`docs/v1.2-weights.md` ｜ 交接总览：`docs/v1.2-summary.md`
 - 储备方案与批次验收规则：`docs/v1.2-roadmap.md` ｜ 提案评估：`docs/v1.2-candidates.md`
-- **下一版（已封存为 `v1.3-experimental`）**：`docs/v1.3-spec.md`（契约 C1–C8.3、Phase 1 收口、Phase 2 判据与首份全量读数）｜ 封存报告与 Backlog：`docs/v1.3-freeze-report.md`
+- **v1.2.x Roadmap（实验性探索，标签 `v1.2.x-experimental`）**：`docs/v1.2-future-llm-extractor.md`（契约 C1–C8.3、Phase 1 收口、Phase 2 判据与首份全量读数）｜ 封存报告与 Backlog：`docs/v1.2-future-llm-extractor-freeze.md`
 - **历史版本（思考过程记录，数据不作为依据）**：`docs/v1.1-*.md`、`docs/v1.0-moonshadow.md`
 - 数据契约：`schema.json` ｜ 建表语句：`ddl.sql`
+
+> **版本原则**：v1.3 分支已被合并为 v1.2 系列的探索日志。直到 LLM 抽取器能在全量集上实现 `>1.0x` 的真实压缩，否则绝不开启新的 Minor 版本（遵循不破不立原则）。
 
 ## 核心特点
 
@@ -289,7 +291,7 @@ moonshadow/
 ├── .gitattributes       `* -text`：禁止换行转换（否则留出集冻结哈希会在 checkout 后全部失效）
 ├── schema.json          记忆卡 JSON Schema（强制校验，additionalProperties=false）
 ├── ddl.sql              SQLite 建表：card / claim / source / card_source / cursor / entity*
-├── docs/                13 份：现行 4 + v1.3 草案 2 + 权威 1 + 索引 + 想法池 + 历史版本 4（见下）
+├── docs/                13 份：现行 4 + v1.2.x Roadmap 2 + 权威 1 + 索引 + 想法池 + 历史版本 4（见下）
 ├── src/moonshadow/      19 个文件 / 18 个模块（纯标准库，含 STUB 抽取器与召回编排器）
 ├── tools/               16 个可执行命令 = **15 条发布验证命令 + 1 条 Phase 2 临时探针**（`run_llm_probe.py` 需本地 LLM key，无 key 时退出 2，**不参与发布验证**）（审计 + 评测 + 重划 + 守卫 + 探针）
 ├── eval/                用例集：gold 25 + rank 26 + holdout 9（冻结）+ network 48 + 冻结清单
@@ -307,8 +309,8 @@ docs/                   按版本号排列，文件名前缀保证字典序 = �
   v1.2-summary.md       交接总览：现状、已确认/已失效结论、缺陷、下一步、复跑索引
   v1.2-roadmap.md       储备方案（分组 f、自适应 h）与 §7.1 批次验收规则 R1/R2/R3
   v1.2-candidates.md    v1.2 提案评估：逐条处置、与现有证据的冲突、重切分、v1.2-A 实测
-  v1.3-spec.md          v1.3 **草案**（未封版）：C1–C8.3 契约、Phase 1 收口与 Phase 2 起步判据
-  v1.3-freeze-report.md v1.3 封存报告与 Backlog：交接摘要与重启信号（不引入新结论）
+  v1.2-future-llm-extractor.md          v1.2.x Roadmap **（实验性探索，未封版）**：C1–C8.3 契约、Phase 1 收口与 Phase 2 起步判据
+  v1.2-future-llm-extractor-freeze.md v1.2.x Roadmap 封存报告与 Backlog：交接摘要与重启信号（不引入新结论）
   v1.1-spec.md          ┐
   v1.1-weights.md       │ 历史版本 · 思考过程记录（与现行并列保留；
   v1.1-summary.md       │ **其数据不作为依据**，读它是为了追溯推理链）
@@ -398,14 +400,14 @@ assert store.get_raw(sid) == "客户说预算 12 万，截止 2026-10-15。"
 留出集不得修改（`run_split_integrity.py` 强制）；用例的 `exclude` 是**断言**，
 必须真的被生产门挡住且 `reason` 与实际规则一致（`run_gate_audit.py` 强制）。
 
-**v1.3（已封存为 `v1.3-experimental`）**：C1–C8.3 契约与守卫落地；全量 25 条 LLM 读数
+**v1.2.x Roadmap（已封存为 `v1.2.x-experimental`）**：C1–C8.3 契约与守卫落地；全量 25 条 LLM 读数
 （保留率 `1.0000`、压缩 `0.7359x`、`todos` 硬要点漏 `25/70`）；Phase 2 判据改成
-「分层 + 信息项」（`docs/v1.3-spec.md` §4.1），并在 §6.4 登记了 `OQ4`（密度挤兑与逻辑时钟）。
-下一个工程件「跨批信息项注册表」见 `docs/backlog.md` 与 `docs/v1.3-freeze-report.md`。
+「分层 + 信息项」（`docs/v1.2-future-llm-extractor.md` §4.1），并在 §6.4 登记了 `OQ4`（密度挤兑与逻辑时钟）。
+下一个工程件「跨批信息项注册表」见 `docs/backlog.md` 与 `docs/v1.2-future-llm-extractor-freeze.md`。
 
 **尚未实现**（契约已定，见 `docs/v1.2-spec.md` §12）：**把 LLM 抽取器接进生产路径**——
 LLM 已能全链路驱动（`tools/run_llm_probe.py --pipeline`；全量 25 条实测保留率 `1.0000`、
-压缩率 `0.7359x`，**仍在膨胀**，见 `docs/v1.3-spec.md` §6.7），但生产路径仍是规则基线；
+压缩率 `0.7359x`，**仍在膨胀**，见 `docs/v1.2-future-llm-extractor.md` §6.7），但生产路径仍是规则基线；
 意图分类器（`time_sensitivity` 只靠人工词表，
 实验已暴露其天花板）、FTS5/向量检索接线、实体消解逻辑、冲突检测器、MCP Server、
 日检与保留清理任务、加密。

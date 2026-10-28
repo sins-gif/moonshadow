@@ -24,7 +24,7 @@
 那是「这张卡从哪来」的权威记录，拿卡里的文字去和原文做匹配是猜。
 未产出卡的层级显示为「—」而不是 ``0.00x``：前者是「不可观测」，后者会被读成「压缩得很差」。
 
-**适用域（v1.3 Phase 0）**：压缩率是输入规模的函数。原文本身只有「一句话 + 一个日期」时，
+**适用域（v1.2.x Roadmap Phase 0）**：压缩率是输入规模的函数。原文本身只有「一句话 + 一个日期」时，
 任何正确系统都做不出 > 1x——没有可抽象的冗余，而精度关卡又要求逐字保留日期与金额。
 旧金标准集 3 条、每条 28–45 token 正落在这个退化区间，因此本版把金标准集扩成 **25 条**
 （其中 22 条长会话，原文 `527–1,927` token，合计 `25,630` token，含跨消息冗余与多类关键字段）。
@@ -40,7 +40,7 @@
 差额 `0.54` 就是那一部分。所以**只把每张卡写短也不够**：要真正超过 `1`
 必须减少卡数（把跨消息冗余归并成更少的卡）。
 
-（v1.2 时这里还有第三条「去掉 `raw_quote`」的参照线。v1.3 决定 Q3 之后它**不再是变量**：
+（v1.2 时这里还有第三条「去掉 `raw_quote`」的参照线。v1.2.x Roadmap 决定 Q3 之后它**不再是变量**：
 `raw_quote` 已移出 `CARD_TEXT_FIELDS`，把它置空与基线**实测完全同值**
 （`0.4976x` / `0.4868x`）——这正说明口径变更生效了。）
 
@@ -93,10 +93,10 @@ WORK_DIR = ROOT / ".tmp" / "eval"
 #: 阈值来自 SPEC-v1.1 §9.2。未达标即视为关卡未通过。
 DEFAULT_MIN_RECALL = 0.98
 
-#: **C6.1 基线豁免**（`docs/v1.3-spec.md` §2 C6.1）：被指定为参照点的抽取器，
+#: **C6.1 基线豁免**（`docs/v1.2-future-llm-extractor.md` §2 C6.1）：被指定为参照点的抽取器，
 #: 其 C6 违规记入 `CaseResult.expected_violations`，**不作为失败条件**。
 #: 理由：基线的存在意义就是展示「不遵守契约的形状是什么样的」，它必须保持原地不动；
-#: 修它会让 v1.2 与 v1.3 失去可比性。**豁免只对这些名字生效**——任何其他抽取器
+#: 修它会让 v1.2 与 v1.2.x Roadmap 失去可比性。**豁免只对这些名字生效**——任何其他抽取器
 #: （stub、Phase 2 的 LLM）的 C6 违规仍然让 `run_eval` 退出 `1`。
 #: 按名字而不是按调用点识别：这样「谁被豁免」写在数据里，不靠调用方自觉。
 BASELINE_IDENTIFIERS: tuple[str, ...] = ("baseline-rules",)
@@ -372,7 +372,7 @@ class EvalReport:
         if self.expected_violations:
             lines.append(
                 f"C6.1 基线豁免：卡契约违规 {self.expected_violations} 条（**预期**）——"
-                "参照点抽取器按定义不遵守 v1.3 的卡契约（C6 字段互斥 + C8 summary 承载），"
+                "参照点抽取器按定义不遵守 v1.2.x Roadmap 的卡契约（C6 字段互斥 + C8 summary 承载），"
                 "它保持原地不动；豁免只对它生效，见 `eval.BASELINE_IDENTIFIERS` 与 spec C6.1。"
             )
         if self.field_violations:
@@ -459,7 +459,7 @@ def run_case(
 
         cards = store.cards(session_id=session)
         raw_text = "\n".join(case.messages)
-        # 回链侧：`source_id → 原文`。v1.3 决定 Q3 之后，`raw_quote` 不再进卡文本，
+        # 回链侧：`source_id → 原文`。v1.2.x Roadmap 决定 Q3 之后，`raw_quote` 不再进卡文本，
         # 硬字段在卡内查不到时按这些原文块兜底（见 `verify.verify_no_silent_loss`）。
         raw_messages = [
             {"id": row["id"], "text": store.get_raw(str(row["id"]))}

@@ -30,7 +30,7 @@ SOFT_PATTERNS: dict[str, str] = {
     "condition": r"(?:如果|若|一旦|当.+时|前提是|除非)",
 }
 
-#: **定性内容判据**用的三类关键词。这是 v1.3 Phase 0 补的第二道关卡：
+#: **定性内容判据**用的三类关键词。这是 v1.2.x Roadmap Phase 0 补的第二道关卡：
 #: 硬字段（日期/金额/URL/代码）保住 ≠ 内容保住——「决定先做读缓存」「绝不带病上线」
 #: 这类句子一个硬字段都没有，丢光了也不会让硬关卡变红。
 #:
@@ -68,7 +68,7 @@ MUTUALLY_EXCLUSIVE_FIELDS: tuple[str, ...] = ("facts", "decisions", "todos", "co
 #: 实测踩过：规则基线的 `facts` 里既有整句也有关键字段片段（`12万`、`2026-10-15`），
 #: 初版判据把片段也当句子去比，于是 589 条 `summary` 违规里有 46 条是片段命中，
 #: 另外 685 处片段重叠也根本不是「复述整句」。**边界要写明**：片段级复述逃得出这条判据，
-#: 那是 C6 的已知缺口（见 `docs/v1.3-spec.md` §6.2 漏洞 #10）。
+#: 那是 C6 的已知缺口（见 `docs/v1.2-future-llm-extractor.md` §6.2 漏洞 #10）。
 SUMMARY_RESTATEMENT_MIN_CHARS = 12
 
 #: **C8（`summary` 必须承载内容）**的三个参数。
@@ -81,7 +81,7 @@ SUMMARY_MENTION_CHARS = 4
 SUMMARY_SHARE_MIN = 0.10
 SUMMARY_SHARE_MAX = 0.40
 
-#: 参与「卡内文本」比对的字段。**`raw_quote` 不在其中**（v1.3 决定 Q3）：
+#: 参与「卡内文本」比对的字段。**`raw_quote` 不在其中**（v1.2.x Roadmap 决定 Q3）：
 #: 卡把原文整段抄一遍不是压缩，把它计入卡文本就等于给逐字复制发许可证——
 #: 去掉它之后压缩率才是对「抽取器有没有真的抽象」的度量。
 #: 原文的逐字可用性由 **store 的原文与 `source_ids` 回链**保证，不再由卡自己保证；
@@ -167,7 +167,7 @@ def verify_no_silent_loss(
 ) -> Report:
     """校验一段原文里的关键字段，是否至少被一张卡**保住或追得回来**。
 
-    两级判据（v1.3 决定 Q3 之后）：
+    两级判据（v1.2.x Roadmap 决定 Q3 之后）：
 
     1. **卡内文本**：字段出现在某张卡的 `summary`/`facts`/… 里 —— 第一判据。
     2. **回链可达**：卡内查不到时，看它是否出现在「这些卡所引用的原文块」里
@@ -232,11 +232,11 @@ def qualitative_sentences(text: str) -> list[tuple[str, str]]:
 def verify_field_mutual_exclusion(cards: Sequence[Mapping[str, Any]]) -> Report:
     """**C6：卡内字段互斥**——同一句话只能有一个载体字段。
 
-    契约原文见 `docs/v1.3-spec.md` §2 C6：一张卡内，
+    契约原文见 `docs/v1.2-future-llm-extractor.md` §2 C6：一张卡内，
     `facts` / `decisions` / `todos` / `constraints` 四个字段**互斥**；
     `summary` 是对该卡的整体概述，**不得逐字复述**上述任何字段里已出现的句子。
 
-    为什么必须有这条：v1.3 Phase 1 实测过——同一句话既进 `facts` 又进
+    为什么必须有这条：v1.2.x Roadmap Phase 1 实测过——同一句话既进 `facts` 又进
     `decisions`/`todos`/`constraints` 时，token 加权压缩率是 `0.9712x`；
     同样的代码、同样的卡数，只把重复的那一份去掉，读数变成 `2.3311x`。
     也就是**这一条值 `1.36x` 的压缩率**：它不是抽取器能力的天花板，是契约缺失造出来的天花板。
@@ -308,7 +308,7 @@ def _shared_fragment(left: str, right: str, length: int) -> bool:
 
 
 def verify_summary_substance(cards: Sequence[Mapping[str, Any]]) -> Report:
-    """**C8：`summary` 必须承载内容**（契约见 `docs/v1.3-spec.md` §2 C8）。
+    """**C8：`summary` 必须承载内容**（契约见 `docs/v1.2-future-llm-extractor.md` §2 C8）。
 
     两条子判据：
 
@@ -379,7 +379,7 @@ def verify_qualitative_retention(
 ) -> Report:
     """**定性内容必须有载体**：决策 / 硬约束 / 否定句所在的消息，必须被某张卡引用。
 
-    为什么必须有这一条：硬关卡只认日期/金额/URL/代码。v1.3 Phase 0 实测过——
+    为什么必须有这一条：硬关卡只认日期/金额/URL/代码。v1.2.x Roadmap Phase 0 实测过——
     一个「只保留含硬字段的句子」的抽取器在硬关卡上 `recall = 1.0000`、只产生软告警，
     却把全部决策与条件丢光。这样一来，**正常的抽象**与**错误的信息丢失**在关卡上不可区分。
 

@@ -5,7 +5,7 @@
 `src/moonshadow/extractor.py` 是 **STUB**（非生产路径）：它不接 LLM、不被
 `BaselineExtractor` 调用、不接入 `select()`。本工具是它唯一的调用方。
 
-它回答三个问题（对应 v1.3 Phase 1 的接口设计）：
+它回答三个问题（对应 v1.2.x Roadmap Phase 1 的接口设计）：
 
 1. **卡数**：`474 → ?`，离批内归并的下界（`241`）有多近；
 2. **压缩率**：两层口径（与 `run_eval` 同源，并被交叉核对），是否进入 Phase 0 实测过的可达区；
@@ -156,7 +156,7 @@ def audit_case(case: GoldCase) -> tuple[CaseAudit, list[BatchDiagnostics]]:
             str(row["id"]) for row in rows if str(row["id"]) not in cited
         )
 
-        # 硬字段：卡内可查（契约）与回链可达（v1.3 C5）分别统计
+        # 硬字段：卡内可查（契约）与回链可达（v1.2.x Roadmap C5）分别统计
         linked = normalize("".join(sources[sid] for sid in cited if sid in sources))
         haystack = normalize(card_text_many(cards))
         for name, values in extract_key_fields("\n".join(case.messages)).items():

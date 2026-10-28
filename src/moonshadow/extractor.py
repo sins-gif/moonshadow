@@ -1,11 +1,11 @@
-"""v1.3 Phase 1 的抽取器契约 + **规则版 stub**。
+"""v1.2.x Roadmap Phase 1 的抽取器契约 + **规则版 stub**。
 
 **STUB：非生产路径。** 本模块不被 `scoring.select()` 使用，也不被 `BaselineExtractor`
 调用；唯一的调用方是探针 `tools/run_extractor_stub.py`。它存在的目的不是提供能力，
-而是把 v1.3 C5 的接口形状**先跑起来**，让接口漏洞以实测数据的形式暴露——
+而是把 v1.2.x Roadmap C5 的接口形状**先跑起来**，让接口漏洞以实测数据的形式暴露——
 接口签名应当由这些实测固化，而不是先写文档再猜。
 
-契约来源：`docs/v1.3-spec.md` §2 C5 与 §3 Q1–Q3（输入单元 = 一批消息；
+契约来源：`docs/v1.2-future-llm-extractor.md` §2 C5 与 §3 Q1–Q3（输入单元 = 一批消息；
 批内归并归抽取器、跨批归并归管线；`T0/T1` 硬字段进 `summary`/`facts`，**不写 `raw_quote`**）。
 
 **规则版 stub 做了什么**（全部复用既有定义，不引入新逻辑）：
@@ -75,7 +75,7 @@ class Message:
 class MemoryCard:
     """抽取器的输出单元：一张**尚未补齐派生字段**的卡（`cards.make_card` 负责补齐）。
 
-    **刻意不含 `raw_quote`**：v1.3 Q3 已把它移出卡文本，逐字原文由 store 与
+    **刻意不含 `raw_quote`**：v1.2.x Roadmap Q3 已把它移出卡文本，逐字原文由 store 与
     `source_ids` 回链保证。契约要求 `T0/T1` 的硬字段落在 `summary` 或 `facts`。
     """
 
@@ -143,7 +143,7 @@ class BatchDiagnostics:
     unstructured_claims: int = 0
     #: **机械 C6 抓不到的重叠上界**：降级到 `facts` 的句子与 `decisions`/`todos`/`constraints`
     #: 中的句子**共享至少一个 `HARD_PATTERNS` 匹配**的条数（一句只计一次）。
-    #: 判据与 C8.2 同源、不引入语义相似度（那会带进新模型与新参数，属 v1.4）。
+    #: 判据与 C8.2 同源、不引入语义相似度（那会带进新模型与新参数，属 后续版本）。
     #: 它是**上界**：有交集不一定真重叠，没有交集一定不重叠。用于回答
     #: 「C6 机械通过 ≠ 语义通过」，也是 OQ 议题的输入数据。
     facts_decisions_overlap_candidates: int = 0
@@ -368,7 +368,7 @@ def _build_summary(
         fragments = longer
     # ③ **不为了压到 40% 以下而丢条目**：那会牺牲「提及」这条实质要求。
     #    小卡上两条判据互斥（提及全部要点所需长度 > 字段合计的 40%），此时保提及、让长度违约——
-    #    契约缺一条优先级规定，这一条记在 `docs/v1.3-spec.md` §6.2。
+    #    契约缺一条优先级规定，这一条记在 `docs/v1.2-future-llm-extractor.md` §6.2。
     # ③ **硬要点必须出现**（C8.2 方案 B）：片段前缀未必含硬值（`预算先按18` 里就没有 `18 万元`），
     #    所以显式补上三字段里全部 HARD_PATTERNS 匹配；长度可能超 40%，由 C8.3 允许。
     text = "；".join(fragments)

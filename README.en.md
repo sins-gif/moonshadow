@@ -12,15 +12,17 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 
 > **This version is the data-driven parameter-convergence release**: `f = 0.5925`, `θ = θ′ = 0.3941`, default scheme multiplicative;
 > `T9` is covered on the negative side only (the gap is on record). Sealed-release reading: **all 14 commands exit `0`** — for `run_eval.py` that means the measurements and the gate both pass,
-> while the baseline's 705 C6 violations are individually recognised and exempted (C6.1, see `docs/v1.3-spec.md` §2).
+> while the baseline's 705 C6 violations are individually recognised and exempted (C6.1, see `docs/v1.2-future-llm-extractor.md` §2).
 
 - Current specification (**read this first**): **`docs/v1.2-spec.md`** ← definitions, contracts and **fixed parameter values**
 - **Documentation index / where to start**: `docs/README.md` ← authority map, reading order, maintenance rules
 - Technical report (evidence): `docs/v1.2-weights.md` ｜ Handover overview: `docs/v1.2-summary.md`
 - Reserved proposals and batch-acceptance rules: `docs/v1.2-roadmap.md` ｜ Proposal evaluation: `docs/v1.2-candidates.md`
-- **Next version (frozen as `v1.3-experimental`)**: `docs/v1.3-spec.md` (contracts C1–C8.3, Phase 1 closure, Phase 2 criteria and the first full reading) ｜ freeze report and backlog: `docs/v1.3-freeze-report.md`
+- **v1.2.x Roadmap (experimental exploration, tag `v1.2.x-experimental`)**: `docs/v1.2-future-llm-extractor.md` (contracts C1–C8.3, Phase 1 closure, Phase 2 criteria and the first full reading) ｜ freeze report and backlog: `docs/v1.2-future-llm-extractor-freeze.md`
 - **Historical versions (records of the thinking process; their data is not to be relied on)**: `docs/v1.1-*.md`, `docs/v1.0-moonshadow.md`
 - Data contract: `schema.json` ｜ DDL: `ddl.sql`
+
+> **Version policy**: the v1.3 branch has been merged into the v1.2 series as an exploration log. Until the LLM extractor achieves a real compression ratio `>1.0x` on the full case set, no new minor version will be opened (following the "no break, no build" principle).
 
 ## Core features
 
@@ -288,7 +290,7 @@ moonshadow/
 ├── .gitattributes       `* -text`: disables newline conversion (otherwise the frozen holdout hashes all break after checkout)
 ├── schema.json          memory-card JSON Schema (enforced validation, additionalProperties=false)
 ├── ddl.sql              SQLite DDL: card / claim / source / card_source / cursor / entity*
-├── docs/                13 files: 4 current + 2 v1.3 drafts + 1 authoritative + index + idea backlog + 4 historical (see below)
+├── docs/                13 files: 4 current + 2 v1.2.x Roadmap drafts + 1 authoritative + index + idea backlog + 4 historical (see below)
 ├── src/moonshadow/      19 files / 18 modules (standard library only; includes the stub extractor and the recall orchestrator)
 ├── tools/               16 executables = 15 release-verification commands + 1 Phase 2 probe
 │                        (run_llm_probe.py needs a local LLM key; it is not part of release verification)
@@ -307,8 +309,8 @@ docs/                   ordered by version number; the filename prefix makes lex
   v1.2-summary.md       handover overview: status, confirmed/invalidated conclusions, defects, next steps, rerun index
   v1.2-roadmap.md       reserved proposals (grouped f, adaptive h) and the §7.1 batch-acceptance rules R1/R2/R3
   v1.2-candidates.md    v1.2 proposal evaluation: item-by-item disposition, conflicts with existing evidence, re-split, v1.2-A measurements
-  v1.3-spec.md          v1.3 **draft** (not sealed): the C1–C8.3 contracts, Phase 1 closure and the Phase 2 entry criteria
-  v1.3-freeze-report.md v1.3 freeze report and backlog: handover summary and restart signals (no new conclusions)
+  v1.2-future-llm-extractor.md          v1.2.x Roadmap **draft** (not sealed): the C1–C8.3 contracts, Phase 1 closure and the Phase 2 entry criteria
+  v1.2-future-llm-extractor-freeze.md v1.2.x Roadmap freeze report and backlog: handover summary and restart signals (no new conclusions)
   v1.1-spec.md          ┐
   v1.1-weights.md       │ historical versions · records of the thinking process (kept alongside the current
   v1.1-summary.md       │ ones; **their data is not to be relied on** — read them to trace the reasoning chain)
@@ -398,14 +400,14 @@ access billing and tier promotion/demotion.
 the holdout set must not be modified (enforced by `run_split_integrity.py`); and a case's `exclude` entries are **assertions**,
 which must really be blocked by the production gate with a `reason` matching the actual rule (enforced by `run_gate_audit.py`).
 
-**v1.3 (frozen as `v1.3-experimental`)**: the C1–C8.3 contracts and their guards landed; the full 25-case LLM reading
+**v1.2.x Roadmap (frozen as `v1.2.x-experimental`)**: the C1–C8.3 contracts and their guards landed; the full 25-case LLM reading
 (retention `1.0000`, compression `0.7359x`, `todos` hard-point misses `25/70`); the Phase 2 criteria were rebuilt as
-"per-tier + information-item" (`docs/v1.3-spec.md` §4.1), and `OQ4` (density crowding and the logical clock) was logged in §6.4.
-The next piece of work, the cross-batch information-item registry, is in `docs/backlog.md` and `docs/v1.3-freeze-report.md`.
+"per-tier + information-item" (`docs/v1.2-future-llm-extractor.md` §4.1), and `OQ4` (density crowding and the logical clock) was logged in §6.4.
+The next piece of work, the cross-batch information-item registry, is in `docs/backlog.md` and `docs/v1.2-future-llm-extractor-freeze.md`.
 
 **Not implemented yet** (the contracts are fixed; see `docs/v1.2-spec.md` §12): **wiring the LLM extractor into the production path** —
 the LLM can already drive the whole chain (`tools/run_llm_probe.py --pipeline`; over all 25 gold cases: retention `1.0000`,
-compression `0.7359x`, **still inflating**, see `docs/v1.3-spec.md` §6.7), but the production path is still the rule baseline;
+compression `0.7359x`, **still inflating**, see `docs/v1.2-future-llm-extractor.md` §6.7), but the production path is still the rule baseline;
 an intent classifier (`time_sensitivity` relies only on a hand-written word list,
 and the experiments have exposed its ceiling), FTS5/vector retrieval wiring, entity resolution, a conflict detector, an MCP server,
 daily checks and retention cleanup, and encryption.

@@ -95,7 +95,7 @@ class SilentLossTest(unittest.TestCase):
 class QualitativeRetentionTest(unittest.TestCase):
     """定性内容判据：硬字段保住 ≠ 内容保住。
 
-    这一条来自 v1.3 Phase 0 的实测缺陷：只保留含硬字段的句子时，硬关卡
+    这一条来自 v1.2.x Roadmap Phase 0 的实测缺陷：只保留含硬字段的句子时，硬关卡
     `recall = 1.0000`、只产生软告警，而全部决策与条件已经丢光——
     「正常的抽象」与「错误的信息丢失」在关卡上不可区分。
     """
@@ -267,7 +267,7 @@ class FieldMutualExclusionTest(unittest.TestCase):
 
         `summary` 里出现 `12万` 这种字段片段不算「复述整句」。规则基线上实测有
         `685` 处这类片段重叠——把它们算成违规会让判据变成误报机器。
-        代价是片段级复述逃得出这条判据，那是 C6 的已知缺口，记在 `v1.3-spec.md` §6.2。
+        代价是片段级复述逃得出这条判据，那是 C6 的已知缺口，记在 `v1.2-future-llm-extractor.md` §6.2。
         """
         report = verify_field_mutual_exclusion(
             [{"summary": "本周要点：12万。", "facts": ["12万"]}]
