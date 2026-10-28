@@ -8,7 +8,7 @@
 |---|---|
 | **仓库** | <https://github.com/sins-gif/moonshadow> |
 | **版本** | `v1.2.0`（[该版本的代码](https://github.com/sins-gif/moonshadow/tree/v1.2.0) ｜ `git tag v1.2.0`） |
-| **最小复跑** | `python -m unittest discover -s tests` → `Ran 243 tests` + `OK` |
+| **最小复跑** | `python -m unittest discover -s tests` → `Ran 246 tests` + `OK` |
 
 > **本版是数据驱动的参数收敛版**：`f = 0.5925`、`θ = θ′ = 0.3941`、默认方案乘性；
 > `T9` 走负例覆盖（该缺口记录在案）。封版读数：**14 条命令全部退出码 `0`**——其中 `run_eval.py` 的读法是：度量与过门均通过，
@@ -28,7 +28,7 @@
 - **采用有界乘性修正算法**（`q = r · m`，`m ∈ [f, 1]`），规避加性融合的**阈值不可分离**缺陷：
   同一批用例上，加性方案在合成网格里于乘性方案**有保证**的区域仍反转 `117` 组，乘性越界 `0` 组；
   其排序一致率**也并列满分**（`1.000` vs `1.000`）——**排序指标看不出的缺陷，由阈值与漂移实验暴露**。
-- **243 项单元测试 + 15 条审计/验证命令**：参数与数据严格受控——用例的卡龄窗口与门前置、
+- **246 项单元测试 + 15 条审计/验证命令**：参数与数据严格受控——用例的卡龄窗口与门前置、
   负例是否真被门挡住、留出集是否被改动、文档里的赋值式是否与代码一致，**全部可执行、可复跑**。
 
 ### 架构一览
@@ -45,7 +45,7 @@ flowchart TB
         TIERS["tiers.py：T0–T9 与半衰期"]
         CARDS["cards.py：按 schema.json 强制校验"]
     end
-    subgraph RECALL["调度层：协议定义，零件已实现、编排器未实现"]
+    subgraph RECALL["调度层（已实现：recall.py 编排）"]
         GATE1["定性硬门：卡龄窗口 + T8/T9 载体禁令"]
         SCORE["scoring.py：q = r · m（有界乘性修正）"]
         GATE2["定量硬门：q ≥ θ"]
@@ -71,8 +71,10 @@ flowchart TB
 1. **调度层那条链路是 `v1.2-spec.md` §5 的定义**（硬门 → 打分 → 装箱）。其中「硬门」分两段：
    定性段（卡龄窗口、`T8/T9` 载体禁令）在打分**前**，定量段（`q ≥ θ`）在打分**后**——
    `θ` 是 `q` 的阈值，所以它不可能排在打分前面。
-2. **编排器尚未实现**：`scoring.py`、`pack.py` 是**零件**，没有 `recall.py` 把它们串成一次召回
-   （见 `docs/v1.2-candidates.md` §2.6 与 §11 的缺口清单）。这条链路现在只在契约与评测里成立。
+2. **编排器已实现**：`recall.py` 把 `scoring.select()` 与 `pack.pack()` 串成一次召回
+   （定性硬门 → 打分 → 定量硬门 → 装箱），它**不定义任何规则**——卡龄窗口与阈值在
+   `scoring.passes_qualitative_gate` / `passes_quantitative_gate`，配额与降级在 `pack`。
+   `recall()` 零副作用，`verbose=True` 才打印每步砍掉多少张卡。
 3. **`verify.py` 不在召回链路上**：它由 `eval.run_case` 调用，判定卡是否静默丢了硬字段；
    装箱不经过它。把「损失判定」画进装箱箭头会让人以为装箱会拦丢字段，那是错的。
 
@@ -97,7 +99,7 @@ flowchart TB
 无需安装任何依赖（Python 3.10+，纯标准库）：
 
 ```bash
-python -m unittest discover -s tests   # 确定性测试：条数与状态以本命令输出为准（本次交付实测 Ran 243 tests + OK）
+python -m unittest discover -s tests   # 确定性测试：条数与状态以本命令输出为准（本次交付实测 Ran 246 tests + OK）
 
 # 审计与契约（四条，均应为 0 违规）
 python tools/run_case_audit.py          # 用例的卡龄窗口与 T8/T9 门前置
@@ -288,10 +290,10 @@ moonshadow/
 ├── schema.json          记忆卡 JSON Schema（强制校验，additionalProperties=false）
 ├── ddl.sql              SQLite 建表：card / claim / source / card_source / cursor / entity*
 ├── docs/                13 份：现行 4 + v1.3 草案 2 + 权威 1 + 索引 + 想法池 + 历史版本 4（见下）
-├── src/moonshadow/      18 个文件 / 17 个模块（纯标准库，含 STUB 抽取器）
+├── src/moonshadow/      19 个文件 / 18 个模块（纯标准库，含 STUB 抽取器与召回编排器）
 ├── tools/               16 个可执行命令 = **15 条发布验证命令 + 1 条 Phase 2 临时探针**（`run_llm_probe.py` 需本地 LLM key，无 key 时退出 2，**不参与发布验证**）（审计 + 评测 + 重划 + 守卫 + 探针）
 ├── eval/                用例集：gold 25 + rank 26 + holdout 9（冻结）+ network 48 + 冻结清单
-├── tests/               14 个测试文件 / 243 项断言
+├── tests/               15 个测试文件 / 246 项断言
 ├── examples/demo.py     端到端演示
 └── experiments/         用户自算记录（原样保存，不得修改；见文件内说明）
 ```
@@ -346,7 +348,7 @@ src/moonshadow/
   network_eval.py       network 赋值评测：混淆矩阵 + 严格/可达双口径
   network_rules.py      四类网络的类级词汇规则（不依赖 tier）
   drift.py              参数漂移下的反转区域测量（加性方案无比值上界的实证）
-tests/                  Phase 1 / 2 / 2.5 / 3 的验收测试（14 个测试文件；`Ran 243 tests` + `OK`，以命令输出为准）
+tests/                  Phase 1 / 2 / 2.5 / 3 的验收测试（14 个测试文件；`Ran 246 tests` + `OK`，以命令输出为准）
 experiments/            用户自算记录（原样保存，不得修改；见文件内说明）
 examples/demo.py        端到端演示
 ```
@@ -384,7 +386,9 @@ assert store.get_raw(sid) == "客户说预算 12 万，截止 2026-10-15。"
 ## 当前状态
 
 **已实现并测试**：原始层寻址与字节级回取、冷存分帧、记忆卡契约与幂等写入、
-取代（冲突不覆盖）、回链双向反查、打分（七种方案）与硬门、预算装箱、确定性精度校验、
+取代（冲突不覆盖）、回链双向反查、打分（七种方案）与硬门（定性段 / 定量段 / 合取）、
+**召回编排（`recall.py`：读卡 → 定性硬门 → 打分 → 定量硬门 → 装箱，零副作用）**、
+预算装箱、确定性精度校验、
 抽取管道（提示词 + 规则快路径 + 游标幂等 + 可替换抽取器契约）、
 抽取评测关卡（金标准 + 双指标 + CI 入口）、排序对照实验、意图识别评测、θ 标定工具、
 访问计费与层级升降。

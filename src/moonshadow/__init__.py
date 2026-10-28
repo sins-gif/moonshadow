@@ -26,9 +26,12 @@ from .scoring import (
     decay,
     next_tier,
     passes_gate,
+    passes_qualitative_gate,
+    passes_quantitative_gate,
     score_card,
     select,
 )
+from .recall import RecallStats, recall
 from .tiers import TIER_HALF_LIFE, TIER_ORDER, half_life_for, tier_index
 from .verify import Report, extract_key_fields, verify_no_silent_loss
 from .pack import Item, PackResult, estimate_tokens, pack
@@ -68,8 +71,12 @@ __all__ = [
     "decay",
     "next_tier",
     "passes_gate",
+    "passes_qualitative_gate",
+    "passes_quantitative_gate",
     "score_card",
     "select",
+    "RecallStats",
+    "recall",
     "TIER_HALF_LIFE",
     "TIER_ORDER",
     "half_life_for",

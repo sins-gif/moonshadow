@@ -335,6 +335,64 @@ def score_card(
     raise ValueError(f"未知打分方案：{scheme!r}（可选：{SCHEMES}）")
 
 
+def passes_qualitative_gate(
+    tier: str,
+    *,
+    delta_days: float,
+    explicit_recall: bool = False,
+) -> bool:
+    """硬门的**定性段**：这张卡此刻「允不允许被看见」，与分数无关。
+
+    - `T0/T1`：常驻，无卡龄限制；
+    - `T2/T3`：不设卡龄限制（它们的门全在定量段）；
+    - `T4/T5`：卡龄 ≤ `RECENT_WINDOW`（定义 6：`T4–T5 ≤ 30` 天）；
+    - `T6/T7`：卡龄 ≤ `FRESH_WINDOW`（定义 6：`T6–T7 ≤ 7` 天）；
+    - `T8/T9`：**只在显式回溯请求时**放行——寒暄/噪音按定义就是可丢弃的，
+      唯一例外是用户明确要「翻旧账」（`explicit_recall`）。
+
+    拆出来不是为了重构好看，是因为两段的作用域不同：定性段与分数无关、必须在打分**前**跑；
+    定量段要比较 `q` 与 `θ`，只能在打分**后**跑。召回编排器（`recall.py`）靠这个划分
+    分别报告「被卡龄/载体禁令挡掉多少」与「被阈值挡掉多少」，而规则仍只在这一处定义。
+    """
+    tier_index(tier)  # 未知层级直接抛错，不静默放行
+    if tier in ALWAYS_ON_TIERS or tier in ("T2", "T3"):
+        return True
+    if tier in ("T4", "T5"):
+        return delta_days <= RECENT_WINDOW
+    if tier in ("T6", "T7"):
+        return delta_days <= FRESH_WINDOW
+    if tier in ("T8", "T9"):
+        return explicit_recall
+    raise ValueError(f"未知层级：{tier!r}")
+
+
+def passes_quantitative_gate(
+    tier: str,
+    *,
+    score: float,
+    has_open_task: bool = False,
+    theta: float = THETA,
+    theta_high: float = THETA_HIGH,
+) -> bool:
+    """硬门的**定量段**：分数是否过本层级的阈值。
+
+    `T6/T7` 用 `theta_high`。现行定值 `θ′ = θ`（两者数值相同），但**语义不同**：
+    「取消 `T6/T7` 的独立更高门槛」是上一轮的决定（见 `docs/v1.2-spec.md` §5.7），
+    代码里保留两档，是为了让那次决定可被复现、也可被重新打开。
+    `T2/T3` 的 `has_open_task` 是阈值豁免：待办卡不该被「更多但无关」的新卡挤掉。
+    """
+    tier_index(tier)
+    if tier in ALWAYS_ON_TIERS or tier in ("T8", "T9"):
+        return True  # 准入问题已在定性段解决
+    if tier in ("T2", "T3"):
+        return score > theta or has_open_task
+    if tier in ("T4", "T5"):
+        return score > theta
+    if tier in ("T6", "T7"):
+        return score > theta_high
+    raise ValueError(f"未知层级：{tier!r}")
+
+
 def passes_gate(
     tier: str,
     *,
@@ -345,19 +403,12 @@ def passes_gate(
     theta: float = THETA,
     theta_high: float = THETA_HIGH,
 ) -> bool:
-    """硬门：先定性过滤，再谈打分。顺序与 SPEC-v1.1 §6 一致。"""
-    tier_index(tier)  # 未知层级直接抛错，不静默放行
-    if tier in ALWAYS_ON_TIERS:
-        return True
-    if tier in ("T2", "T3"):
-        return score > theta or has_open_task
-    if tier in ("T4", "T5"):
-        return delta_days <= RECENT_WINDOW and score > theta
-    if tier in ("T6", "T7"):
-        return delta_days <= FRESH_WINDOW and score > theta_high
-    if tier in ("T8", "T9"):
-        return explicit_recall
-    raise ValueError(f"未知层级：{tier!r}")
+    """硬门 = 定性段 ∧ 定量段（先定性，再定量，与 SPEC §5.2 一致）。"""
+    return passes_qualitative_gate(
+        tier, delta_days=delta_days, explicit_recall=explicit_recall
+    ) and passes_quantitative_gate(
+        tier, score=score, has_open_task=has_open_task, theta=theta, theta_high=theta_high
+    )
 
 
 def select(

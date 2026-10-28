@@ -8,7 +8,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 |---|---|
 | **Repository** | <https://github.com/sins-gif/moonshadow> |
 | **Version** | `v1.2.0` ([code at this version](https://github.com/sins-gif/moonshadow/tree/v1.2.0) ｜ `git tag v1.2.0`) |
-| **Minimal rerun** | `python -m unittest discover -s tests` → `Ran 243 tests` + `OK` |
+| **Minimal rerun** | `python -m unittest discover -s tests` → `Ran 246 tests` + `OK` |
 
 > **This version is the data-driven parameter-convergence release**: `f = 0.5925`, `θ = θ′ = 0.3941`, default scheme multiplicative;
 > `T9` is covered on the negative side only (the gap is on record). Sealed-release reading: **all 14 commands exit `0`** — for `run_eval.py` that means the measurements and the gate both pass,
@@ -28,7 +28,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 - **Bounded multiplicative correction** (`q = r · m`, `m ∈ [f, 1]`) avoids the **threshold-inseparability** defect of additive fusion:
   on the same case set, additive reverses `117` pairs inside the region where multiplicative is **guaranteed** not to, while multiplicative goes out of bounds `0` times;
   additive's ranking agreement **also ties at full marks** (`1.000` vs `1.000`) — **a defect that ranking metrics cannot see, exposed by threshold calibration and the drift experiment**.
-- **243 unit assertions + 15 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
+- **246 unit assertions + 15 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
   whether negatives are really blocked by the gate, whether the holdout set has been modified, whether the assignment forms in the docs match the code — **all executable and re-runnable**.
 
 ### Architecture at a glance
@@ -45,7 +45,7 @@ flowchart TB
         TIERS["tiers.py: T0–T9 and half-lives"]
         CARDS["cards.py: enforced against schema.json"]
     end
-    subgraph RECALL["Retrieval: defined by the spec; parts implemented, orchestrator not"]
+    subgraph RECALL["Retrieval (implemented: orchestrated by recall.py)"]
         GATE1["Qualitative gate: age window + T8/T9 carrier ban"]
         SCORE["scoring.py: q = r · m (bounded multiplicative)"]
         GATE2["Quantitative gate: q ≥ θ"]
@@ -71,8 +71,10 @@ Three things to read off the diagram (these are conventions, not implementation 
 1. **The retrieval chain is the definition in `v1.2-spec.md` §5** (gate → score → pack). The gate has two stages:
    the qualitative one (age window, `T8/T9` carrier ban) runs **before** scoring, the quantitative one (`q ≥ θ`) runs **after**
    — `θ` is a threshold on `q`, so it cannot come before scoring.
-2. **The orchestrator does not exist yet**: `scoring.py` and `pack.py` are **parts**; there is no `recall.py` wiring them into one retrieval
-   (see `docs/v1.2-candidates.md` §2.6 and the gap list in §11). The chain currently holds only in the contract and in the evaluation harness.
+2. **The orchestrator exists**: `recall.py` wires `scoring.select()` and `pack.pack()` into one retrieval
+   (qualitative gate → score → quantitative gate → pack). It defines **no rules** — age windows and thresholds live in
+   `scoring.passes_qualitative_gate` / `passes_quantitative_gate`, quotas and downgrades in `pack`.
+   `recall()` has no side effects; diagnostics are printed only with `verbose=True`.
 3. **`verify.py` is not on the retrieval chain**: it is called by `eval.run_case` to judge whether a card silently lost hard fields;
    packing does not go through it. Drawing "loss judgement" into the packing arrow would suggest packing blocks field loss, which is false.
 
@@ -97,7 +99,7 @@ Clock injection (`SystemClock` / `FixedClock`) is described in `v1.2-spec.md` §
 No dependencies to install (Python 3.10+, standard library only):
 
 ```bash
-python -m unittest discover -s tests   # deterministic tests: count and status are whatever this command prints (measured for this delivery: Ran 243 tests + OK)
+python -m unittest discover -s tests   # deterministic tests: count and status are whatever this command prints (measured for this delivery: Ran 246 tests + OK)
 
 # Audits and contracts (four of them; all should report 0 violations)
 python tools/run_case_audit.py          # case age windows and T8/T9 gate preconditions
@@ -287,11 +289,11 @@ moonshadow/
 ├── schema.json          memory-card JSON Schema (enforced validation, additionalProperties=false)
 ├── ddl.sql              SQLite DDL: card / claim / source / card_source / cursor / entity*
 ├── docs/                13 files: 4 current + 2 v1.3 drafts + 1 authoritative + index + idea backlog + 4 historical (see below)
-├── src/moonshadow/      17 files / 16 modules (standard library only)
+├── src/moonshadow/      19 files / 18 modules (standard library only; includes the stub extractor and the recall orchestrator)
 ├── tools/               16 executables = 15 release-verification commands + 1 Phase 2 probe
 │                        (run_llm_probe.py needs a local LLM key; it is not part of release verification)
 ├── eval/                case sets: gold 25 + rank 26 + holdout 9 (frozen) + network 48 + frozen manifest
-├── tests/               14 test files / 243 assertions
+├── tests/               15 test files / 246 assertions
 ├── examples/demo.py     end-to-end demo
 └── experiments/         the user's own hand computations (kept verbatim, must not be modified; see the notes in the files)
 ```
@@ -346,7 +348,7 @@ src/moonshadow/
   network_eval.py       network assignment evaluation: confusion matrix + strict/attainable dual readings
   network_rules.py      class-level vocabulary rules for the four network types (independent of tier)
   drift.py              measurement of reversal regions under parameter drift (empirical evidence that the additive scheme has no ratio bound)
-tests/                  acceptance tests for Phase 1 / 2 / 2.5 / 3 (14 test files; `Ran 243 tests` + `OK`, whatever the command prints is authoritative)
+tests/                  acceptance tests for Phase 1 / 2 / 2.5 / 3 (14 test files; `Ran 246 tests` + `OK`, whatever the command prints is authoritative)
 experiments/            the user's own hand computations (kept verbatim, must not be modified; see the notes in the files)
 examples/demo.py        end-to-end demo
 ```
@@ -384,7 +386,9 @@ assert store.get_raw(sid) == "客户说预算 12 万，截止 2026-10-15。"
 ## Current status
 
 **Implemented and tested**: raw-layer addressing and byte-level retrieval, cold-storage framing, memory-card contract and idempotent writes,
-supersession (conflicts are marked, never overwritten), bidirectional backlink lookup, scoring (seven schemes) and the gate, budget packing, deterministic precision checking,
+supersession (conflicts are marked, never overwritten), bidirectional backlink lookup, scoring (seven schemes) and the gate
+(qualitative / quantitative / conjunction), **the recall orchestrator (`recall.py`: read → qualitative gate → score → quantitative gate → pack, zero side effects)**,
+budget packing, deterministic precision checking,
 the extraction pipeline (prompt + rule fast path + cursor idempotence + a replaceable extractor contract),
 the extraction evaluation gate (gold standard + two metrics + CI entry point), the ranking comparison, intent-detection evaluation, the θ calibration tool,
 access billing and tier promotion/demotion.
