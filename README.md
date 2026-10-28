@@ -31,6 +31,53 @@
 - **243 项单元测试 + 15 条审计/验证命令**：参数与数据严格受控——用例的卡龄窗口与门前置、
   负例是否真被门挡住、留出集是否被改动、文档里的赋值式是否与代码一致，**全部可执行、可复跑**。
 
+### 架构一览
+
+```mermaid
+flowchart TB
+    REQ["AI Agent：发起长文本请求"]
+    subgraph STORAGE["冷存层（已实现）"]
+        STORE["store.py：SQLite 真相源"]
+        CHUNKS["chunks.py：分帧压缩 + sha256"]
+    end
+    subgraph EXTRACT["抽取层（已实现）"]
+        COMPRESS["compress.py：规则快路径 + 抽取管道"]
+        TIERS["tiers.py：T0–T9 与半衰期"]
+        CARDS["cards.py：按 schema.json 强制校验"]
+    end
+    subgraph RECALL["调度层：协议定义，零件已实现、编排器未实现"]
+        GATE1["定性硬门：卡龄窗口 + T8/T9 载体禁令"]
+        SCORE["scoring.py：q = r · m（有界乘性修正）"]
+        GATE2["定量硬门：q ≥ θ"]
+        PACK["pack.py：Token 预算装箱"]
+    end
+    CTX["给 LLM 的纯净上下文"]
+
+    REQ -->|"原文写入"| STORE
+    STORE --- CHUNKS
+    STORE -->|"逐字抽取"| COMPRESS
+    COMPRESS --> TIERS
+    TIERS --> CARDS
+    CARDS -->|"记忆短卡"| GATE1
+    GATE1 --> SCORE
+    SCORE --> GATE2
+    GATE2 --> PACK
+    PACK -->|"装入预算"| CTX
+    PACK -.->|"需要逐字细节时按 source_id 回链"| STORE
+```
+
+读图注意三点（都是口径，不是实现细节）：
+
+1. **调度层那条链路是 `v1.2-spec.md` §5 的定义**（硬门 → 打分 → 装箱）。其中「硬门」分两段：
+   定性段（卡龄窗口、`T8/T9` 载体禁令）在打分**前**，定量段（`q ≥ θ`）在打分**后**——
+   `θ` 是 `q` 的阈值，所以它不可能排在打分前面。
+2. **编排器尚未实现**：`scoring.py`、`pack.py` 是**零件**，没有 `recall.py` 把它们串成一次召回
+   （见 `docs/v1.2-candidates.md` §2.6 与 §11 的缺口清单）。这条链路现在只在契约与评测里成立。
+3. **`verify.py` 不在召回链路上**：它由 `eval.run_case` 调用，判定卡是否静默丢了硬字段；
+   装箱不经过它。把「损失判定」画进装箱箭头会让人以为装箱会拦丢字段，那是错的。
+
+时间注入（`SystemClock` / `FixedClock`）见 `v1.2-spec.md` §5.4；三条不可退让的约束见本文末节。
+
 ## 项目现状（v1.2）
 
 - 已确立时间下限参数 **`f = 0.5925`**（`= 237/400`），完成全局参数收敛：

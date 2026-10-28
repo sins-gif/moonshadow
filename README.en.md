@@ -31,6 +31,53 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 - **243 unit assertions + 15 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
   whether negatives are really blocked by the gate, whether the holdout set has been modified, whether the assignment forms in the docs match the code — **all executable and re-runnable**.
 
+### Architecture at a glance
+
+```mermaid
+flowchart TB
+    REQ["AI Agent: send a long request"]
+    subgraph STORAGE["Cold storage (implemented)"]
+        STORE["store.py: SQLite source of truth"]
+        CHUNKS["chunks.py: framed compression + sha256"]
+    end
+    subgraph EXTRACT["Extraction (implemented)"]
+        COMPRESS["compress.py: rule fast path + extraction pipeline"]
+        TIERS["tiers.py: T0–T9 and half-lives"]
+        CARDS["cards.py: enforced against schema.json"]
+    end
+    subgraph RECALL["Retrieval: defined by the spec; parts implemented, orchestrator not"]
+        GATE1["Qualitative gate: age window + T8/T9 carrier ban"]
+        SCORE["scoring.py: q = r · m (bounded multiplicative)"]
+        GATE2["Quantitative gate: q ≥ θ"]
+        PACK["pack.py: token-budget packing"]
+    end
+    CTX["clean context handed to the LLM"]
+
+    REQ -->|"write raw text"| STORE
+    STORE --- CHUNKS
+    STORE -->|"verbatim extraction"| COMPRESS
+    COMPRESS --> TIERS
+    TIERS --> CARDS
+    CARDS -->|"memory cards"| GATE1
+    GATE1 --> SCORE
+    SCORE --> GATE2
+    GATE2 --> PACK
+    PACK -->|"fit into the budget"| CTX
+    PACK -.->|"back-link by source_id when verbatim detail is needed"| STORE
+```
+
+Three things to read off the diagram (these are conventions, not implementation trivia):
+
+1. **The retrieval chain is the definition in `v1.2-spec.md` §5** (gate → score → pack). The gate has two stages:
+   the qualitative one (age window, `T8/T9` carrier ban) runs **before** scoring, the quantitative one (`q ≥ θ`) runs **after**
+   — `θ` is a threshold on `q`, so it cannot come before scoring.
+2. **The orchestrator does not exist yet**: `scoring.py` and `pack.py` are **parts**; there is no `recall.py` wiring them into one retrieval
+   (see `docs/v1.2-candidates.md` §2.6 and the gap list in §11). The chain currently holds only in the contract and in the evaluation harness.
+3. **`verify.py` is not on the retrieval chain**: it is called by `eval.run_case` to judge whether a card silently lost hard fields;
+   packing does not go through it. Drawing "loss judgement" into the packing arrow would suggest packing blocks field loss, which is false.
+
+Clock injection (`SystemClock` / `FixedClock`) is described in `v1.2-spec.md` §5.4; the three non-negotiable constraints are in the last section of this file.
+
 ## Project status (v1.2)
 
 - The time floor is fixed at **`f = 0.5925`** (`= 237/400`), completing the global parameter convergence:
