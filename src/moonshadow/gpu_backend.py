@@ -52,12 +52,28 @@ def probe() -> bool:
         return True
     try:  # pragma: no cover - 环境相关
         _cp.zeros(1)
-        PROBE_REASON = f"{PROBE_REASON}，设备探测通过（已探测）"
-        return True
     except Exception as exc:  # pragma: no cover - 环境相关
         AVAILABLE = False
         PROBE_REASON = f"cupy 已导入但没有可用设备（{type(exc).__name__}: {exc}）"
         return False
+    # 再触发一次**极小的 JIT 编译**。实测踩到的坑：cupy 能导入、能分配显存，
+    # 但第一次编译内核就失败——Windows 中文用户名会让 nvrtc 读不到临时 .cu 与 cupy 自带的头文件
+    # （报 cannot open source file "cupy/complex.cuh"）。这种失败必须在 probe() 里撞出来，
+    # 而不是等业务调用跑到一半才炸：回退路径的存在意义就是「探测不到就别用」。
+    try:  # pragma: no cover - 环境相关
+        (_cp.arange(4, dtype=_cp.float64) * 2.0).sum()
+    except Exception as exc:  # pragma: no cover - 环境相关
+        AVAILABLE = False
+        PROBE_REASON = (
+            f"cupy 可用但 JIT 编译失败（{type(exc).__name__}）。"
+            "常见原因：Windows 中文用户名路径让 nvrtc 读不到 .cu 或 cupy 头文件。"
+            "两个已实测的解法：① 把 TEMP/TMP 与 CUPY_CACHE_DIR 指到纯 ASCII 目录；"
+            "② 用目录联接把 site-packages 映到 ASCII 路径"
+            "（mklink /J C:\\cu-site <site-packages>，再把 C:\\cu-site 放进 PYTHONPATH）。"
+        )
+        return False
+    PROBE_REASON = f"{PROBE_REASON}，设备与 JIT 探测通过（已探测）"
+    return True
 
 
 def batch_query_cos_cpu(

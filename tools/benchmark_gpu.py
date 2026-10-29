@@ -91,9 +91,12 @@ def main(argv: list[str] | None = None) -> int:
     rate = args.n / cpu_seconds
     print(f"  {args.repeat} 次取最小：{cpu_seconds:.3f} s  →  {rate:,.0f} 条/秒")
 
+    # 注意顺序：**先探测、再打印原因**。反过来的话打出来的是 import 期的旧状态，
+    # 真正失败的原因（设备 / JIT）会被掩盖——这条是实测踩出来的，不是风格问题。
+    gpu_ok = gpu_backend.probe()
     print(f"\ncupy 后端：{gpu_backend.PROBE_REASON}")
     gpu_seconds = None
-    if gpu_backend.probe():
+    if gpu_ok:
         for _ in range(args.warmup):
             gpu_backend.batch_query_cos_gpu(query, cards)  # 预热：分配 + JIT 不计入
         gpu_seconds = _time(gpu_backend.batch_query_cos_gpu, query, cards, args.repeat)

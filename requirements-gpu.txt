@@ -1,10 +1,24 @@
-# 仅用于 GPU 加速分支（v1.3-gpu-acceleration）。
+﻿# 只在 GPU 分支里追加：实测踩到的坑（可直接照做的解法）
 #
-# 主分支的默认安装**不读**这个文件：`src/moonshadow/` 是纯标准库、零第三方依赖，
-# 那是它最强的性质（也是别人能五分钟复算结果的前提）。
+# 1) 只装 cupy-cuda12x 不够：wheel 不带 CUDA 头文件，第一次 JIT 编译会报
+#    ValueError: Failed to find CUDA headers ...
+#    解法（比整套 [ctk] 省 2GB）：
+#      python -m pip install --user nvidia-cuda-nvrtc-cu12 nvidia-cuda-runtime-cu12 `
+#                                 nvidia-cuda-cccl-cu12 nvidia-cublas-cu12
 #
-# 装不上也不影响任何东西：`src/moonshadow/gpu_backend.py` 自己 guard 住 import，
-# 缺 cupy / 缺 CUDA 时 `AVAILABLE=False`，调用方自动回退纯 Python 参考实现。
+# 2) Windows 中文用户名会让 nvrtc 读不到临时 .cu 与 cupy 自带的头文件：
+#    CompileException: Catastrophic error: cannot open source file "cupy/complex.cuh"
+#    解法 A（路径侧）：把 TMP/TEMP 与 CUPY_CACHE_DIR 指到纯 ASCII 目录
+#        $env:TEMP='C:\cupy-tmp'; $env:TMP='C:\cupy-tmp'; $env:CUPY_CACHE_DIR='C:\cupy-cache'
+#    解法 B（包侧，A 不够时）：用目录联接把 site-packages 映到 ASCII 路径，再放进 PYTHONPATH
+#        cmd /c mklink /J C:\cu-site "<site-packages>"
+#        $env:PYTHONPATH='C:\cu-site'
 #
-# 版本选择：cupy-cuda12x 对应 CUDA 12.x。CUDA 11 的机器改成 cupy-cuda11x。
+# 3) 实测读数（RTX 3050 Laptop 4GB / 驱动 577.03 / CUDA 12.9，50,000 x 768，3 次取最小）：
+#      cpu(pure-python)  10.771 s   →   4,642 条/秒
+#      gpu(cupy)          0.433 s   → 115,572 条/秒   →  24.9x
+#      两侧一致性 max_abs_diff = 2.22e-16
+#
+# 4) 没有这些环境变量时，gpu_backend.probe() 会在 JIT 预检失败后**自动回退**并给出上面的解法，
+#    不会在业务调用中途炸掉——这条是实测后补的，不是设计时想到的。
 cupy-cuda12x
