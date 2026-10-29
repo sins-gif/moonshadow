@@ -1,0 +1,10 @@
+# 仅用于 GPU 加速分支（v1.3-gpu-acceleration）。
+#
+# 主分支的默认安装**不读**这个文件：`src/moonshadow/` 是纯标准库、零第三方依赖，
+# 那是它最强的性质（也是别人能五分钟复算结果的前提）。
+#
+# 装不上也不影响任何东西：`src/moonshadow/gpu_backend.py` 自己 guard 住 import，
+# 缺 cupy / 缺 CUDA 时 `AVAILABLE=False`，调用方自动回退纯 Python 参考实现。
+#
+# 版本选择：cupy-cuda12x 对应 CUDA 12.x。CUDA 11 的机器改成 cupy-cuda11x。
+cupy-cuda12x
