@@ -293,7 +293,7 @@ moonshadow/
 ├── ddl.sql              SQLite 建表：card / claim / source / card_source / cursor / entity*
 ├── docs/                13 份：现行 4 + v1.2.x Roadmap 2 + 权威 1 + 索引 + 想法池 + 历史版本 4（见下）
 ├── src/moonshadow/      20 个文件 / 19 个模块（纯标准库，含 STUB 抽取器、召回编排器与可选 GPU 后端）
-├── tools/               17 个可执行命令 = **15 条发布验证命令 + 1 条 Phase 2 临时探针 + 1 条 GPU 基准**（`run_llm_probe.py` 需本地 LLM key，无 key 时退出 2，**不参与发布验证**）（审计 + 评测 + 重划 + 守卫 + 探针）
+├── tools/               19 个可执行命令 = **15 条发布验证命令 + 1 条 Phase 2 临时探针 + 3 条 GPU 基准/诊断**（`run_llm_probe.py` 需本地 LLM key，无 key 时退出 2，**不参与发布验证**）（审计 + 评测 + 重划 + 守卫 + 探针）
 ├── eval/                用例集：gold 25 + rank 26 + holdout 9（冻结）+ network 48 + 冻结清单
 ├── tests/               15 个测试文件 / 246 项断言
 ├── examples/demo.py     端到端演示
