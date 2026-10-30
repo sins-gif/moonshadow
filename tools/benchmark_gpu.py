@@ -115,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     rate = args.n / cpu_seconds
     ratios = [c / g for c, g in groups if g]
+    # 报告里用的加速比以**逐组比值的统计**为准：median(cpu)/median(gpu) 与 median(cpu/gpu)
+    # 不是一个东西（前者把分子分母的中位拼在一起），实测差可达 0.4x。两者都印出来，别让人混读。
     print(f"\n取中位数（{args.runs} 组 × {args.repeat} 次取最小）："
           f"cpu {cpu_seconds:.3f} s" + (f" / gpu {gpu_seconds:.3f} s" if gpu_seconds else ""))
 
@@ -125,12 +127,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{'gpu(cupy)':<22}{'—':>10}{'—':>14}{'—':>10}")
         print("\n注：GPU 列为空不代表失败，只代表本机没有算力；CPU 侧读数与回退路径一致。")
     else:
+        headline = statistics.median(ratios) if ratios else cpu_seconds / gpu_seconds
         print(f"{'gpu(cupy)':<22}{gpu_seconds:>10.3f}"
-              f"{args.n / gpu_seconds:>14,.0f}{cpu_seconds / gpu_seconds:>9.1f}x")
+              f"{args.n / gpu_seconds:>14,.0f}{headline:>9.1f}x")
         if len(ratios) > 1:
             so = sorted(ratios)
             print(f"\n加速比区间（{len(ratios)} 组）：最小 {so[0]:.2f}x · 中位 {statistics.median(so):.2f}x"
                   f" · 最大 {so[-1]:.2f}x（抖动 {(so[-1] - so[0]) / statistics.median(so):.1%}）")
+            print(f"  对照：中位之比 = median(cpu)/median(gpu) = {cpu_seconds / gpu_seconds:.2f}x"
+                  f"（与上面的中位不是一个量，别混读）")
+            low = [r for r in so if r < statistics.median(so) * 0.95]
+            high = [r for r in so if r > statistics.median(so) * 1.05]
+            print(f"  分布形态：低于中位 5% 以下的 {len(low)} 组，高于中位 5% 以上的 {len(high)} 组"
+                  f" → {'双峰，说明有状态在切换（不是高斯噪声）' if low and high else '连续分布'}")
             print("  汇报时请给区间并说明是「组间漂移」，不要只取最好的那一次。")
     print(f"\n小输入自检（8 条 × 16 维，只验算法形状）：{gpu_backend.self_check()}")
 
