@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import pathlib
+import statistics
 import sys
 import time
 from array import array
@@ -66,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dim", type=int, default=768, help="向量维度（默认 768）")
     parser.add_argument("--repeat", type=int, default=3, help="CPU 侧重复次数，取最小值")
     parser.add_argument("--warmup", type=int, default=1, help="GPU 侧预热次数（不计入）")
+    parser.add_argument("--runs", type=int, default=1, help="重复分组数（>1 时给出加速比区间）")
     parser.add_argument("--self-check", action="store_true", help="只做两侧一致性比对")
     args = parser.parse_args(argv)
 
@@ -86,23 +88,35 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  生成耗时 {time.perf_counter() - started:.2f} s；"
           f"约 {args.n * args.dim * 8 / 1024 / 1024:.0f} MiB（array('d') 紧凑存储）")
 
-    print("\n纯 Python 参考实现（这就是回退路径）：")
-    cpu_seconds = _time(gpu_backend.batch_query_cos_cpu, query, cards, args.repeat)
-    rate = args.n / cpu_seconds
-    print(f"  {args.repeat} 次取最小：{cpu_seconds:.3f} s  →  {rate:,.0f} 条/秒")
-
     # 注意顺序：**先探测、再打印原因**。反过来的话打出来的是 import 期的旧状态，
     # 真正失败的原因（设备 / JIT）会被掩盖——这条是实测踩出来的，不是风格问题。
     gpu_ok = gpu_backend.probe()
     print(f"\ncupy 后端：{gpu_backend.PROBE_REASON}")
-    gpu_seconds = None
     if gpu_ok:
         for _ in range(args.warmup):
             gpu_backend.batch_query_cos_gpu(query, cards)  # 预热：分配 + JIT 不计入
-        gpu_seconds = _time(gpu_backend.batch_query_cos_gpu, query, cards, args.repeat)
-        print(f"  {args.repeat} 次取最小：{gpu_seconds:.3f} s  →  {args.n / gpu_seconds:,.0f} 条/秒")
-    else:
-        print("  跳过计时（不假装测过）——本机没有可用 GPU。")
+
+    # 分组重复：组内各自 repeat 次取最小，组间独立。为什么要分组而不是只加深 repeat——
+    # 组内取最小只是「这一段时间里最好的一次」，无法反映跨时间的漂移（笔记本功耗墙、
+    # 其它程序占用 GPU、温度）。要让读者看到一个区间，必须让**组**成为统计单位。
+    groups: list[tuple[float, float | None]] = []
+    for index in range(args.runs):
+        cpu_s = _time(gpu_backend.batch_query_cos_cpu, query, cards, args.repeat)
+        gpu_s = (
+            _time(gpu_backend.batch_query_cos_gpu, query, cards, args.repeat) if gpu_ok else None
+        )
+        groups.append((cpu_s, gpu_s))
+        tail = f" / gpu {gpu_s:.3f} s → {cpu_s / gpu_s:.2f}x" if gpu_s else " / gpu —"
+        print(f"  第 {index + 1}/{args.runs} 组：cpu {cpu_s:.3f} s{tail}")
+
+    cpu_seconds = statistics.median(g[0] for g in groups)
+    gpu_seconds = (
+        statistics.median(g[1] for g in groups) if gpu_ok and groups[0][1] is not None else None
+    )
+    rate = args.n / cpu_seconds
+    ratios = [c / g for c, g in groups if g]
+    print(f"\n取中位数（{args.runs} 组 × {args.repeat} 次取最小）："
+          f"cpu {cpu_seconds:.3f} s" + (f" / gpu {gpu_seconds:.3f} s" if gpu_seconds else ""))
 
     print()
     print(f"{'后端':<22}{'耗时(s)':>10}{'条/秒':>14}{'加速比':>10}")
@@ -113,6 +127,11 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(f"{'gpu(cupy)':<22}{gpu_seconds:>10.3f}"
               f"{args.n / gpu_seconds:>14,.0f}{cpu_seconds / gpu_seconds:>9.1f}x")
+        if len(ratios) > 1:
+            so = sorted(ratios)
+            print(f"\n加速比区间（{len(ratios)} 组）：最小 {so[0]:.2f}x · 中位 {statistics.median(so):.2f}x"
+                  f" · 最大 {so[-1]:.2f}x（抖动 {(so[-1] - so[0]) / statistics.median(so):.1%}）")
+            print("  汇报时请给区间并说明是「组间漂移」，不要只取最好的那一次。")
     print(f"\n小输入自检（8 条 × 16 维，只验算法形状）：{gpu_backend.self_check()}")
 
     # 全量一致性：用**本次实际输入**把两侧输出逐条比一遍。
