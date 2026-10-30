@@ -291,8 +291,8 @@ moonshadow/
 ├── schema.json          memory-card JSON Schema (enforced validation, additionalProperties=false)
 ├── ddl.sql              SQLite DDL: card / claim / source / card_source / cursor / entity*
 ├── docs/                13 files: 4 current + 2 v1.2.x Roadmap drafts + 1 authoritative + index + idea backlog + 4 historical (see below)
-├── src/moonshadow/      19 files / 18 modules (standard library only; includes the stub extractor and the recall orchestrator)
-├── tools/               16 executables = 15 release-verification commands + 1 Phase 2 probe
+├── src/moonshadow/      20 files / 19 modules (standard library only; includes the stub extractor, the recall orchestrator and an optional GPU backend)
+├── tools/               19 executables = 15 release-verification commands + 1 Phase 2 probe + 3 GPU benchmark/diagnostic tools
 │                        (run_llm_probe.py needs a local LLM key; it is not part of release verification)
 ├── eval/                case sets: gold 25 + rank 26 + holdout 9 (frozen) + network 48 + frozen manifest
 ├── tests/               15 test files / 246 assertions
