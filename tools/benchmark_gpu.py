@@ -113,7 +113,21 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(f"{'gpu(cupy)':<22}{gpu_seconds:>10.3f}"
               f"{args.n / gpu_seconds:>14,.0f}{cpu_seconds / gpu_seconds:>9.1f}x")
-    print(f"\n一致性：{gpu_backend.self_check()}")
+    print(f"\n小输入自检（8 条 × 16 维，只验算法形状）：{gpu_backend.self_check()}")
+
+    # 全量一致性：用**本次实际输入**把两侧输出逐条比一遍。
+    # 为什么必须单独做：小输入自检只能证明「算法写得一样」，不能证明「这一次算得一样」；
+    # 而简历/汇报里那句「误差 2.2e-16」如果不说清是在哪种输入上量的，就是含糊其辞。
+    if gpu_seconds is not None:
+        cpu_all = gpu_backend.batch_query_cos_cpu(query, cards)
+        gpu_all = gpu_backend.batch_query_cos_gpu(query, cards)
+        diffs = [abs(a - b) for a, b in zip(cpu_all, gpu_all)]
+        worst = max(diffs)
+        print(
+            f"全量输出一致性（真正的 {args.n:,} 条）：max_abs_diff = {worst:.3e}"
+            f"（最差在第 {diffs.index(worst)} 条）· 容差 {gpu_backend.TOLERANCE:g} → "
+            f"{'PASS' if worst <= gpu_backend.TOLERANCE else 'FAIL'}"
+        )
     return 0
 
 
