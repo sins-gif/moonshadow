@@ -30,6 +30,11 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from moonshadow import gpu_backend  # noqa: E402
 
+try:  # numpy 只有 --contiguous 布局需要（cupy 本来就依赖它）
+    import numpy as _np  # type: ignore[import-not-found]
+except Exception:  # pragma: no cover - 环境相关
+    _np = None  # type: ignore[assignment]
+
 #: 线性同余参数（Numerical Recipes 的经典取值）：只为可复现，不追求统计质量。
 _LCG_A, _LCG_C, _LCG_M = 1664525, 1013904223, 2**32
 
@@ -51,6 +56,24 @@ def _vectors(count: int, dim: int, seed: int = 20260601) -> list[array]:
     return data
 
 
+def _vectors_flat(count: int, dim: int, seed: int = 20260601) -> array:
+    """生成 `count × dim` 的**一整块连续缓冲**（而不是 count 个独立 array）。
+
+    这是 `--contiguous` 布局的数据源。它与 `_vectors` 的差别不在数值（同一套 LCG 参数、
+    同一个种子给出同一批数），只在**内存布局**：连续缓冲可以零拷贝变成 ndarray，
+    而 `list[array]` 必须由 cupy/numpy 在 host 侧重新拼一遍。
+    """
+    state = seed
+    flat = array("d", bytes(8 * count * dim))
+    index = 0
+    for _ in range(count):
+        for _j in range(dim):
+            state = (_LCG_A * state + _LCG_C) % _LCG_M
+            flat[index] = (state / _LCG_M) * 2.0 - 1.0
+            index += 1
+    return flat
+
+
 def _time(fn, query, cards, repeat: int) -> float:
     """跑 `repeat` 次取最小值（秒）。"""
     best = float("inf")
@@ -69,6 +92,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--warmup", type=int, default=1, help="GPU 侧预热次数（不计入）")
     parser.add_argument("--runs", type=int, default=1, help="重复分组数（>1 时给出加速比区间）")
     parser.add_argument("--self-check", action="store_true", help="只做两侧一致性比对")
+    parser.add_argument(
+        "--contiguous",
+        action="store_true",
+        help="数据布局改为单块连续缓冲（去掉 host 侧 marshal）；默认仍是 list[array]，与既有读数可比",
+    )
+    parser.add_argument("--kernel-reps", type=int, default=30, help="纯 kernel 档的重复次数")
     args = parser.parse_args(argv)
 
     if args.self_check:
@@ -81,10 +110,21 @@ def main(argv: list[str] | None = None) -> int:
         print("  → GPU 不可用，仅验证了 CPU 参考实现可跑；一致性检查留待有显卡的机器。")
         return 0
 
+    layout = "continuous（单块连续缓冲，零拷贝）" if args.contiguous else "list[array]（现状，含 marshal）"
     print(f"生成假向量：{args.n:,} 条 × {args.dim} 维（固定种子 20260601，可复现）")
+    print(f"数据布局：{layout}")
     started = time.perf_counter()
     query = _vectors(1, args.dim)[0]
-    cards = _vectors(args.n, args.dim, seed=7)
+    matrix = None
+    if args.contiguous:
+        flat = _vectors_flat(args.n, args.dim, seed=7)
+        view = memoryview(flat)  # array('d') 的 memoryview 已经是 'd'，再 cast("d") 会报错
+        cards = [view[i * args.dim:(i + 1) * args.dim] for i in range(args.n)]
+        matrix = _np.frombuffer(flat, dtype=_np.float64).reshape(args.n, args.dim)
+        cards_gpu = matrix
+    else:
+        cards = _vectors(args.n, args.dim, seed=7)
+        cards_gpu = cards
     print(f"  生成耗时 {time.perf_counter() - started:.2f} s；"
           f"约 {args.n * args.dim * 8 / 1024 / 1024:.0f} MiB（array('d') 紧凑存储）")
 
@@ -94,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\ncupy 后端：{gpu_backend.PROBE_REASON}")
     if gpu_ok:
         for _ in range(args.warmup):
-            gpu_backend.batch_query_cos_gpu(query, cards)  # 预热：分配 + JIT 不计入
+            gpu_backend.batch_query_cos_gpu(query, cards_gpu)  # 预热：分配 + JIT 不计入
 
     # 分组重复：组内各自 repeat 次取最小，组间独立。为什么要分组而不是只加深 repeat——
     # 组内取最小只是「这一段时间里最好的一次」，无法反映跨时间的漂移（笔记本功耗墙、
@@ -103,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     for index in range(args.runs):
         cpu_s = _time(gpu_backend.batch_query_cos_cpu, query, cards, args.repeat)
         gpu_s = (
-            _time(gpu_backend.batch_query_cos_gpu, query, cards, args.repeat) if gpu_ok else None
+            _time(gpu_backend.batch_query_cos_gpu, query, cards_gpu, args.repeat) if gpu_ok else None
         )
         groups.append((cpu_s, gpu_s))
         tail = f" / gpu {gpu_s:.3f} s → {cpu_s / gpu_s:.2f}x" if gpu_s else " / gpu —"
@@ -148,7 +188,7 @@ def main(argv: list[str] | None = None) -> int:
     # 而简历/汇报里那句「误差 2.2e-16」如果不说清是在哪种输入上量的，就是含糊其辞。
     if gpu_seconds is not None:
         cpu_all = gpu_backend.batch_query_cos_cpu(query, cards)
-        gpu_all = gpu_backend.batch_query_cos_gpu(query, cards)
+        gpu_all = gpu_backend.batch_query_cos_gpu(query, cards_gpu)
         diffs = [abs(a - b) for a, b in zip(cpu_all, gpu_all)]
         worst = max(diffs)
         print(
@@ -156,6 +196,31 @@ def main(argv: list[str] | None = None) -> int:
             f"（最差在第 {diffs.index(worst)} 条）· 容差 {gpu_backend.TOLERANCE:g} → "
             f"{'PASS' if worst <= gpu_backend.TOLERANCE else 'FAIL'}"
         )
+    # 纯 kernel 档：数据**预先驻留显存**，只测「矩阵乘 + 归一化 + 拷回」。
+    # 它的用途是给出理论极限，**不能**当日常读数——真实调用永远要先搬数据。
+    if gpu_seconds is not None and gpu_ok:
+        import cupy as cp  # 局内导入：只有这一档才需要
+
+        q_view = _np.frombuffer(array("d", query), dtype=_np.float64) if _np else None
+        dev = cp.asarray(cards_gpu, dtype=cp.float64)
+        qdev = cp.asarray(q_view if q_view is not None else query, dtype=cp.float64)
+        knorm = cp.linalg.norm(qdev)
+        kernel_times = []
+        for _ in range(args.kernel_reps):
+            start = time.perf_counter()
+            result = (dev @ qdev) / (cp.linalg.norm(dev, axis=1) * knorm)
+            cp.asnumpy(result)
+            kernel_times.append(time.perf_counter() - start)
+        kernel_s = min(kernel_times)
+        print(f"\n{'=' * 78}")
+        print("三档口径（本机实测，前提各不相同，不能混着引用）：")
+        print(f"  ① 纯 kernel（数据已驻留显存，不含搬运）  {kernel_s * 1000:>8.1f} ms"
+              f"   → {cpu_seconds / kernel_s:>7.0f}x   理论极限，别当日常值")
+        print(f"  ② 端到端·{'连续缓冲' if args.contiguous else 'list[array]（现状）'}                "
+              f"{gpu_seconds:>8.3f} s   → {statistics.median(ratios) if ratios else 0:>7.1f}x   "
+              f"{'零拷贝布局' if args.contiguous else '含 host 侧 marshal'}")
+        print("  ③ 端到端·另一种布局见对面命令：" f"{'（用 --contiguous 再跑一次）' if not args.contiguous else '（去掉 --contiguous 再跑一次）'}")
+        print(f"{'=' * 78}")
     return 0
 
 
