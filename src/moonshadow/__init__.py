@@ -24,12 +24,15 @@ from .scoring import (
     THETA_HIGH,
     WEIGHTS,
     decay,
+    next_step,
     next_tier,
     passes_gate,
     passes_qualitative_gate,
     passes_quantitative_gate,
     score_card,
     select,
+    step_votes,
+    stepped_tier,
 )
 from .recall import RecallStats, recall
 from .tiers import TIER_HALF_LIFE, TIER_ORDER, half_life_for, tier_index
@@ -69,7 +72,10 @@ __all__ = [
     "THETA_HIGH",
     "WEIGHTS",
     "decay",
+    "next_step",
     "next_tier",
+    "step_votes",
+    "stepped_tier",
     "passes_gate",
     "passes_qualitative_gate",
     "passes_quantitative_gate",
@@ -90,5 +96,5 @@ __all__ = [
     "pack",
 ]
 
-__version__ = "1.2.0"
+__version__ = "1.2.2"
 SCHEMA_VERSION = 1
