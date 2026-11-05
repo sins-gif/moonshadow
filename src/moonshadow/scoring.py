@@ -16,7 +16,7 @@ from .clock import days_between, parse_ts
 from .tiers import (
     RULE_TIER_MAX,
     RULE_TIER_MIN,
-    clamp_rule_tier,
+    TIER_ORDER,
     half_life_for,
     tier_from_index,
     tier_index,
@@ -474,34 +474,154 @@ def select(
 PROMOTE_MIN_ACCESS = 5
 PROMOTE_MIN_SESSIONS = 3
 
+#: 「长期」的门槛：首次访问到最近访问的跨度（天）。
+#: 只有跨过它，才承认一张卡是**长期在用**，而不是「最近被反复问到」。
+LONG_SPAN_DAYS = 30.0
+
+#: 三值判定的票数门限。上下门限**故意不对称**，这就是滞回带：
+#: 升要 `+3` 票、降要 `-2` 票，中间的 `-1..+2` 一律不动，避免阈值附近来回抖。
+STEP_UP_VOTES = 3
+STEP_DOWN_VOTES = -2
+
+#: 每层允许的步进方向（`+1` 升、`0` 不动、`-1` 降）。
+#:
+#: 这是把「楼房」的边界写成数据而不是写成 `if`：方向一旦越界就归零（不是夹逼），
+#: 所以「T9 想要下降」这种反向错误在这一层**表达不出来**。
+#:
+#: 两条边界是**政策**，不是随手写的：
+#: - `T0` 只在创建时确定，之后任何证据都不动（身份/硬约束）。
+#: - `T8` 不许降到 `T9`：`tiers.py:42-43` 定的降级下限就是 `T8`——
+#:   「绝不把内容自动降成可丢弃的 T9」。噪音只能由抽取阶段显式判定，不能被规则「降」出来。
+ALLOWED_STEPS: dict[str, frozenset[int]] = {
+    "T0": frozenset({0}),          # 身份/硬约束：创建时定死，不升也不降
+    "T1": frozenset({0, -1}),      # 长期层：没有上级；闲置够久可以下去（半衰期 365 天，实际很难触发）
+    "T2": frozenset({0, -1}),      # 现在还上不去 T1（那道「钥匙」属待办，未落地）
+    "T3": frozenset({-1, 0, 1}),
+    "T4": frozenset({-1, 0, 1}),
+    "T5": frozenset({-1, 0, 1}),
+    "T6": frozenset({-1, 0, 1}),
+    "T7": frozenset({-1, 0, 1}),
+    "T8": frozenset({0, 1}),       # 降级下限：不许自动降成 T9（寒暄→噪音只能靠抽取器判定）
+    "T9": frozenset({0, 1}),       # 已在最底：不许再降（旧实现会「降」成 T8，方向反）
+}
+
+
+def step_votes(
+    *,
+    access_count_30d: int,
+    sessions_30d: int,
+    span_days: float,
+    idle_days: float,
+    half_life_days: float,
+) -> int:
+    """把证据折算成**整数票**。
+
+    不用加权浮点：每一票都能指出出处（哪个字段、哪条阈值），可以逐条辩论。
+    """
+    votes = 0
+    if access_count_30d >= PROMOTE_MIN_ACCESS:
+        votes += 1
+    if sessions_30d >= PROMOTE_MIN_SESSIONS:
+        votes += 1
+    if span_days >= LONG_SPAN_DAYS:
+        votes += 1
+    if half_life_days > 0 and idle_days <= 0.5 * half_life_days:
+        votes += 1
+    if half_life_days > 0 and access_count_30d == 0 and idle_days > 2.0 * half_life_days:
+        votes -= 2
+    return votes
+
+
+def stepped_tier(tier: str, step: int) -> str:
+    """把步进落到具体层级。**越界抛错，绝不夹逼。**
+
+    这是全仓库唯一一处「步进 → 层级」的换算。旧实现把这件事藏在 `clamp_rule_tier`
+    里做夹逼，于是 `T9` 想下降时被夹到了 `T8`——方向反了还不报错。这里改成：
+    不允许的步进直接 `ValueError`，越界直接 `IndexError`，两者都不会静默改层级。
+    """
+    index = tier_index(tier)
+    if step not in ALLOWED_STEPS[tier]:
+        raise ValueError(f"{tier} 不允许步进 {step:+d}（允许：{sorted(ALLOWED_STEPS[tier])}）")
+    target = index - step                     # +1 表示往 T0 方向，索引减一
+    if not 0 <= target < len(TIER_ORDER):
+        raise IndexError(f"{tier} 步进 {step:+d} 后越界（索引 {target}）")
+    return tier_from_index(target)
+
+
+def next_step(
+    tier: str,
+    *,
+    access_count_30d: int,
+    sessions_30d: int,
+    span_days: float,
+    idle_days: float,
+    half_life_days: float,
+    has_open_task: bool = False,
+) -> int:
+    """层级步进的三值判定：`+1` 升、`0` 不动、`-1` 降。
+
+    与 `next_tier` 的关系：这是它的**方向判定内核**，纯函数、不读库、不改卡。
+    `next_tier` 现在委托给它与 `stepped_tier`——方向与落点各只有一处定义。
+
+    约定：`+1` 表示「往 T0 方向」，索引减一。
+    """
+    tier_index(tier)                        # 未知层级直接抛错，不静默放行
+    votes = step_votes(
+        access_count_30d=access_count_30d,
+        sessions_30d=sessions_30d,
+        span_days=span_days,
+        idle_days=idle_days,
+        half_life_days=half_life_days,
+    )
+    if votes >= STEP_UP_VOTES:
+        step = 1
+    elif votes <= STEP_DOWN_VOTES:
+        step = -1
+    else:
+        step = 0
+    if has_open_task and step < 0:
+        step = 0                            # 未完成事项不降级
+    return step if step in ALLOWED_STEPS[tier] else 0
+
 
 def next_tier(
     tier: str,
     *,
     access_count_30d: int,
     sessions_30d: int,
+    span_days: float = 0.0,
     idle_days: float,
     half_life_days: float,
     has_open_task: bool = False,
 ) -> str:
-    """层级生命周期（日检任务调用），带滞回与安全夹逼。
+    """层级生命周期（日检任务调用）：给定证据，返回下一层。
 
-    - T0/T1 永不参与规则升降（只能由抽取阶段显式声明）
-    - 未完成事项不降级
-    - 升：近 30 天访问 ≥5 次 **且** 跨 ≥3 个会话，最多升到 T2
-    - 降：闲置超过 2×半衰期且近 30 天零访问，最多降到 T8（绝不自动降成 T9）
+    实现**只委托**，两个细节各只有一处定义：
+
+    - 方向：`next_step`（三值 `+1/0/-1` + 滞回带 + 每层允许的步进）
+    - 落点：`stepped_tier`（越界抛错，**不再夹逼**）
+
+    政策（不是随手写的）：
+    - `T0` 只在创建时确定，任何证据都不动；
+    - `T1` 没有上级，但闲置够久可以降（半衰期 365 天，实际要闲置 >730 天才触发）；
+    - `T2` 现在升不上去（T2→T1 那道「钥匙」尚未落地）；
+    - 降级下限是 `T8`：绝不自动把内容降成可丢弃的 `T9`（`tiers.py:42-43`）；
+    - `T9` 已在最底，不会「降」成 `T8`（旧实现的方向 bug 就在这里）；
+    - 未完成事项不降级。
+
+    与旧实现的差别只有两处：`T9` 不再被错降成 `T8`；`T8` 的降级下限从「夹逼」
+    变成「显式声明」。其余逐层落点完全一致（见 `tests/test_scoring.py` 的逐层落点表）。
     """
-    idx = tier_index(tier)
-    if tier in ALWAYS_ON_TIERS or has_open_task:
-        return tier
-
-    if access_count_30d >= PROMOTE_MIN_ACCESS and sessions_30d >= PROMOTE_MIN_SESSIONS:
-        return tier_from_index(clamp_rule_tier(idx - 1))
-
-    if half_life_days > 0 and access_count_30d == 0 and idle_days > 2.0 * half_life_days:
-        return tier_from_index(clamp_rule_tier(idx + 1))
-
-    return tier
+    step = next_step(
+        tier,
+        access_count_30d=access_count_30d,
+        sessions_30d=sessions_30d,
+        span_days=span_days,
+        idle_days=idle_days,
+        half_life_days=half_life_days,
+        has_open_task=has_open_task,
+    )
+    return tier if step == 0 else stepped_tier(tier, step)
 
 
 def default_half_life(tier: str) -> float:
@@ -514,6 +634,10 @@ __all__ = [
     "HYBRID_ALPHA",
     "INTENT_TIME_FLOORS",
     "ADOPTED_SCHEME",
+    "ALLOWED_STEPS",
+    "LONG_SPAN_DAYS",
+    "STEP_DOWN_VOTES",
+    "STEP_UP_VOTES",
     "PROMOTE_MIN_ACCESS",
     "PROMOTE_MIN_SESSIONS",
     "RECENT_WINDOW",
@@ -544,7 +668,10 @@ __all__ = [
     "floor_for_intent",
     "floor_for_sensitivity",
     "match_score",
+    "next_step",
     "next_tier",
+    "step_votes",
+    "stepped_tier",
     "passes_gate",
     "reciprocal_rank_fusion",
     "rrf_weights",
