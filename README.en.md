@@ -37,25 +37,35 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 
 ```mermaid
 flowchart TB
-    REQ["AI Agent: send a long request"]
+    REQ["DSH conversation: captured every turn"]
+    subgraph PLUGIN["dsh-moonshadow plugin (runs locally, not in git)"]
+        CAP["session/event → auto capture"]
+        INJ["systemPrompt.context → auto inject"]
+    end
     subgraph STORAGE["Cold storage (implemented)"]
-        STORE["store.py: SQLite source of truth"]
-        CHUNKS["chunks.py: framed compression + sha256"]
+        STORE["store.py: append raw text<br/>raw/&lt;day&gt;.jsonl + source table"]
+        CHUNKS["chunks.py: frames + sha256<br/>implemented · not wired in production"]
     end
     subgraph EXTRACT["Extraction (implemented)"]
-        COMPRESS["compress.py: rule fast path + extraction pipeline"]
+        COMPRESS["compress.py: rule fast path + extraction pipeline<br/>summary ≠ compression: measured 0.498x (W1 withdrawn)"]
         TIERS["tiers.py: T0–T9 and half-lives"]
         CARDS["cards.py: enforced against schema.json"]
     end
     subgraph RECALL["Retrieval (implemented: orchestrated by recall.py)"]
-        GATE1["Qualitative gate: age window + T8/T9 carrier ban"]
+        GATE1["Qualitative gate: age window + T8/T9 ban"]
         SCORE["scoring.py: q = r · m (bounded multiplicative)"]
         GATE2["Quantitative gate: q ≥ θ"]
-        PACK["pack.py: token-budget packing"]
+        PACK["pack.py: token-budget packing<br/>reserved zone T0/T1 ignores quota (known risk)"]
     end
-    CTX["clean context handed to the LLM"]
+    CTX["clean context handed to the LLM<br/>auto-injected ≤800 tok per turn"]
+    subgraph LOOP["Tier loop (implemented, not wired in production)"]
+        STEP["next_step: ternary -1 / 0 / +1"]
+        LAND["stepped_tier: landing, out-of-range raises"]
+        BOUND["ALLOWED_STEPS: allowed step per tier"]
+    end
 
-    REQ -->|"write raw text"| STORE
+    REQ --> CAP
+    CAP -->|"write raw text"| STORE
     STORE --- CHUNKS
     STORE -->|"verbatim extraction"| COMPRESS
     COMPRESS --> TIERS
@@ -65,10 +75,16 @@ flowchart TB
     SCORE --> GATE2
     GATE2 --> PACK
     PACK -->|"fit into the budget"| CTX
+    CTX -->|"auto inject"| INJ
+    INJ -.->|"next turn"| REQ
     PACK -.->|"back-link by source_id when verbatim detail is needed"| STORE
+    CTX -.->|"context used → note_access (not wired)"| STEP
+    STEP --> LAND
+    LAND --> BOUND
+    BOUND -.->|"tier change → affects the next retrieval"| GATE1
 ```
 
-Three things to read off the diagram (these are conventions, not implementation trivia):
+Four things to read off the diagram (these are conventions, not implementation trivia):
 
 1. **The retrieval chain is the definition in `v1.2-spec.md` §5** (gate → score → pack). The gate has two stages:
    the qualitative one (age window, `T8/T9` carrier ban) runs **before** scoring, the quantitative one (`q ≥ θ`) runs **after**
@@ -79,6 +95,22 @@ Three things to read off the diagram (these are conventions, not implementation 
    `recall()` has no side effects; diagnostics are printed only with `verbose=True`.
 3. **`verify.py` is not on the retrieval chain**: it is called by `eval.run_case` to judge whether a card silently lost hard fields;
    packing does not go through it. Drawing "loss judgement" into the packing arrow would suggest packing blocks field loss, which is false.
+4. **Three boxes are "implemented but not wired in production" — do not read them as running**: frame archiving in `chunks.py`
+   (only `examples/demo.py` and the tests call `archive_day`; the live store has **0 files** under `chunks/`), the `next_tier`
+   loop (**zero production callers**), and `note_access` accounting (**only called from the demo**).
+   One claim is **withdrawn**: the extraction layer produces a **summary**, not a compression — measured `0.498x`
+   (cards larger than the source), see [`docs/withdrawn/W1-compression.md`](docs/withdrawn/W1-compression.md).
+
+### Two ways to use it, with different capability
+
+- **In-process gates and scoring only**: they are **pure functions**, callable as
+  `from moonshadow.scoring import passes_gate`. Measured in an empty directory: **zero files changed in the cwd**
+  (no store created, nothing read). Caveat: `import moonshadow` still loads the `sqlite3` module (it creates no file and
+  opens no database); removing that entirely needs lazy imports in the package.
+  (`GATE_ONLY` is **not an existing mode** — no such identifier exists in the code; it only describes this pure-function usage.)
+- **Full runtime** (auto capture → retrieval → injection): **partial**. Four pieces are missing: `note_access` accounting,
+  the `next_tier` loop, `chunks` archiving, and a reserved-zone cap on the injection budget. All four are tracked in
+  [`docs/CHANGELOG.md`](docs/CHANGELOG.md) and [`docs/backlog.md`](docs/backlog.md).
 
 Clock injection (`SystemClock` / `FixedClock`) is described in `v1.2-spec.md` §5.4; the three non-negotiable constraints are in the last section of this file.
 

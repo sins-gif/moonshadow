@@ -37,25 +37,35 @@
 
 ```mermaid
 flowchart TB
-    REQ["AI Agent：发起长文本请求"]
+    REQ["DSH 对话：每轮自动采集"]
+    subgraph PLUGIN["dsh-moonshadow 插件（本地运行，不进 git）"]
+        CAP["session/event → 自动采集"]
+        INJ["systemPrompt.context → 自动注入"]
+    end
     subgraph STORAGE["冷存层（已实现）"]
-        STORE["store.py：SQLite 真相源"]
-        CHUNKS["chunks.py：分帧压缩 + sha256"]
+        STORE["store.py：原文追加<br/>raw/&lt;day&gt;.jsonl + source 表"]
+        CHUNKS["chunks.py：分帧 + sha256<br/>已实现 · 生产路径未接线"]
     end
     subgraph EXTRACT["抽取层（已实现）"]
-        COMPRESS["compress.py：规则快路径 + 抽取管道"]
+        COMPRESS["compress.py：规则快路径 + 抽取管道<br/>摘要 ≠ 压缩：实测 0.498x（W1 已撤回）"]
         TIERS["tiers.py：T0–T9 与半衰期"]
         CARDS["cards.py：按 schema.json 强制校验"]
     end
     subgraph RECALL["调度层（已实现：recall.py 编排）"]
-        GATE1["定性硬门：卡龄窗口 + T8/T9 载体禁令"]
+        GATE1["定性硬门：卡龄窗口 + T8/T9 禁令"]
         SCORE["scoring.py：q = r · m（有界乘性修正）"]
         GATE2["定量硬门：q ≥ θ"]
-        PACK["pack.py：Token 预算装箱"]
+        PACK["pack.py：Token 预算装箱<br/>常驻区 T0/T1 不受配额（已知风险）"]
     end
-    CTX["给 LLM 的纯净上下文"]
+    CTX["给 LLM 的纯净上下文<br/>自动注入 ≤800 tok/轮"]
+    subgraph LOOP["层级回环（已实现，生产未接线）"]
+        STEP["next_step：三值 -1 / 0 / +1"]
+        LAND["stepped_tier：落点，越界抛错"]
+        BOUND["ALLOWED_STEPS：每层允许的步进"]
+    end
 
-    REQ -->|"原文写入"| STORE
+    REQ --> CAP
+    CAP -->|"原文写入"| STORE
     STORE --- CHUNKS
     STORE -->|"逐字抽取"| COMPRESS
     COMPRESS --> TIERS
@@ -65,10 +75,16 @@ flowchart TB
     SCORE --> GATE2
     GATE2 --> PACK
     PACK -->|"装入预算"| CTX
+    CTX -->|"自动注入"| INJ
+    INJ -.->|"进入下一轮"| REQ
     PACK -.->|"需要逐字细节时按 source_id 回链"| STORE
+    CTX -.->|"上下文被使用 → 记账 note_access（待接）"| STEP
+    STEP --> LAND
+    LAND --> BOUND
+    BOUND -.->|"层级变化 → 影响下次召回"| GATE1
 ```
 
-读图注意三点（都是口径，不是实现细节）：
+读图注意四点（都是口径，不是实现细节）：
 
 1. **调度层那条链路是 `v1.2-spec.md` §5 的定义**（硬门 → 打分 → 装箱）。其中「硬门」分两段：
    定性段（卡龄窗口、`T8/T9` 载体禁令）在打分**前**，定量段（`q ≥ θ`）在打分**后**——
@@ -79,6 +95,20 @@ flowchart TB
    `recall()` 零副作用，`verbose=True` 才打印每步砍掉多少张卡。
 3. **`verify.py` 不在召回链路上**：它由 `eval.run_case` 调用，判定卡是否静默丢了硬字段；
    装箱不经过它。把「损失判定」画进装箱箭头会让人以为装箱会拦丢字段，那是错的。
+4. **图上有三处「已实现但生产没接线」，别当成在跑**：`chunks.py` 的分帧归档（只有 `examples/demo.py`
+   与测试调 `archive_day`，真实库 `chunks/` 是 **0 个文件**）、`next_tier` 的层级回环（**生产调用方 0**）、
+   `note_access` 的记账（**只在 demo 里调过**）。另有一条**已撤回的宣称**：抽取层产出的是**摘要**，
+   不是压缩——实测 `0.498x`（卡比原文大），见 [`docs/withdrawn/W1-compression.md`](docs/withdrawn/W1-compression.md)。
+
+### 两种用法，能力不同（别混着说）
+
+- **in-process 只用门与打分**：它们是**纯函数**，可以直接 `from moonshadow.scoring import passes_gate` 调用。
+  实测在空目录里调用它，**cwd 前后零文件变化**（不建库、不读文件）。
+  注意：`import moonshadow` 仍会加载 `sqlite3` 模块（只是不建文件、不连库）；要彻底不碰得把包的导入改成惰性。
+  （`GATE_ONLY` **不是现有模式**——代码里没有这个标识，它只是描述这种纯函数用法。）
+- **完整 runtime**（自动采集 → 召回 → 注入）：**partial**。缺四件：`note_access` 记账、`next_tier` 回环、
+  `chunks` 归档、注入预算的常驻区上限。这四条都在 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) 与
+  [`docs/backlog.md`](docs/backlog.md) 里有对应条目。
 
 时间注入（`SystemClock` / `FixedClock`）见 `v1.2-spec.md` §5.4；三条不可退让的约束见本文末节。
 
