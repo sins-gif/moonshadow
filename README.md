@@ -328,6 +328,7 @@ moonshadow/
 ├── eval/                用例集：gold 25 + rank 26 + holdout 9（冻结）+ network 48 + 冻结清单
 ├── tests/               17 个测试文件 / 288 项断言
 ├── examples/demo.py     端到端演示
+├── examples/mvp_memory.py 记忆能力 MVP：12 问命中率 / 零重提取 / 可追溯 / 不污染（自包含，一次跑完）
 └── experiments/         用户自算记录（原样保存，不得修改；见文件内说明）
 ```
 

@@ -330,6 +330,7 @@ moonshadow/
 ├── eval/                case sets: gold 25 + rank 26 + holdout 9 (frozen) + network 48 + frozen manifest
 ├── tests/               17 test files / 288 assertions
 ├── examples/demo.py     end-to-end demo
+├── examples/mvp_memory.py memory MVP: hit rate over 12 questions / zero re-extraction / traceability / no contamination
 └── experiments/         the user's own hand computations (kept verbatim, must not be modified; see the notes in the files)
 ```
 
