@@ -67,6 +67,14 @@ WITHDRAWN = DOCS / "withdrawn"
 #: 每个撤回转件必须同时出现的三样东西。缺一样就等于「撤回了，但没人知道是哪版、为什么、何时能重来」。
 WITHDRAWN_FIELDS = ("撤回于", "原因", "重启条件")
 
+#: **待解锁台账**：一条「已确定要做、但被可判定的前置卡住」的事，一个文件（`P<n>-<slug>.md`）。
+#: 与 `backlog.md` 的区别：backlog 是「还没决定做」，这里是「决定了，但有明确的解锁条件」。
+#: 每次阶段性完成时扫一遍，跑各自的解锁判定，能解锁的就搬出去做。
+PENDING = DOCS / "pending"
+
+#: 每条待解锁事项必须写清的四样。缺一样就变成「一条不知道能不能做、也不知道做完算什么的悬案」。
+PENDING_FIELDS = ("目标版本", "想法", "可实现性", "当前状态")
+
 #: **实验性探索文档**（`v1.2.x Roadmap`）。它们属于 v1.2 生态，但状态**不是**「现行」：
 #: 描述的是尚未兑现的东西（LLM 抽取器、跨批信息项注册表）。所以既不按现行查
 #: （那会要求它们承担已实现系统的数值准绳），也不当历史归档（它们没有历史数据）。
@@ -162,6 +170,11 @@ def is_withdrawn(path: pathlib.Path) -> bool:
     return path.parent == WITHDRAWN and path.name != "README.md"
 
 
+def is_pending(path: pathlib.Path) -> bool:
+    """待解锁台账（`docs/pending/` 下的非索引文件）。"""
+    return path.parent == PENDING and path.name != "README.md"
+
+
 def check_links() -> list[str]:
     violations: list[str] = []
     for path in markdown_files():
@@ -207,6 +220,7 @@ def check_classification() -> list[str]:
             or is_living(path)
             or is_experimental(path)
             or path.parent == WITHDRAWN          # 撤回记录（含它自己的索引）
+            or path.parent == PENDING            # 待解锁台账（含它自己的索引）
         ):
             continue
         violations.append(
@@ -367,6 +381,28 @@ def check_withdrawn() -> list[str]:
     return violations
 
 
+def check_pending() -> list[str]:
+    """待解锁台账的每条都必须写清四样：目标版本 / 想法 / 可实现性 / 当前状态。
+
+    为什么要有这条守卫：这类条目的失败模式是「写了想法，但没写解锁条件」——
+    于是每次阶段检查都得重新想一遍「这能不能做了」，等于没记。
+    """
+    violations: list[str] = []
+    if not PENDING.exists():
+        return violations
+    for path in sorted(PENDING.glob("*.md")):
+        if not is_pending(path):
+            continue
+        text = path.read_text(encoding="utf-8")
+        for field in PENDING_FIELDS:
+            if field not in text:
+                violations.append(
+                    f"{path.relative_to(ROOT)}：缺「{field}」——"
+                    "待解锁事项必须写清：目标版本、想法、可实现性（解锁条件与判定方法）、当前状态"
+                )
+    return violations
+
+
 def inventory() -> list[tuple[str, str, int, int]]:
     rows = []
     for path in sorted(DOCS.rglob("*.md")):
@@ -382,6 +418,8 @@ def inventory() -> list[tuple[str, str, int, int]]:
             status = "实验性"
         elif is_withdrawn(path):
             status = "撤回记录"
+        elif is_pending(path):
+            status = "待解锁"
         else:
             status = "现行"
         text = path.read_text(encoding="utf-8")
@@ -408,6 +446,7 @@ def check() -> list[str]:
         + check_authority()
         + check_index_completeness()
         + check_withdrawn()
+        + check_pending()
     )
 
 

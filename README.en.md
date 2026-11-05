@@ -8,7 +8,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 |---|---|
 | **Repository** | <https://github.com/sins-gif/moonshadow> |
 | **Version** | `v1.2.2` (current) ｜ frozen baseline [`v1.2.0`](https://github.com/sins-gif/moonshadow/tree/v1.2.0); version timeline and **withdrawn claims** in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) |
-| **Minimal rerun** | `python -m unittest discover -s tests` → `Ran 285 tests` + `OK` |
+| **Minimal rerun** | `python -m unittest discover -s tests` → `Ran 288 tests` + `OK` |
 
 > **This version is the data-driven parameter-convergence release**: `f = 0.5925`, `θ = θ′ = 0.3941`, default scheme multiplicative;
 > `T9` is covered on the negative side only (the gap is on record). Sealed-release reading: **all 14 commands exit `0`** — for `run_eval.py` that means the measurements and the gate both pass,
@@ -30,7 +30,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 - **Bounded multiplicative correction** (`q = r · m`, `m ∈ [f, 1]`) avoids the **threshold-inseparability** defect of additive fusion:
   on the same case set, additive reverses `117` pairs inside the region where multiplicative is **guaranteed** not to, while multiplicative goes out of bounds `0` times;
   additive's ranking agreement **also ties at full marks** (`1.000` vs `1.000`) — **a defect that ranking metrics cannot see, exposed by threshold calibration and the drift experiment**.
-- **285 unit assertions + 15 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
+- **288 unit assertions + 15 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
   whether negatives are really blocked by the gate, whether the holdout set has been modified, whether the assignment forms in the docs match the code — **all executable and re-runnable**.
 
 ### Architecture at a glance
@@ -133,7 +133,7 @@ Clock injection (`SystemClock` / `FixedClock`) is described in `v1.2-spec.md` §
 No dependencies to install (Python 3.10+, standard library only):
 
 ```bash
-python -m unittest discover -s tests   # deterministic tests: count and status are whatever this command prints (measured for this delivery: Ran 285 tests + OK)
+python -m unittest discover -s tests   # deterministic tests: count and status are whatever this command prints (measured for this delivery: Ran 288 tests + OK)
 
 # Audits and contracts (four of them; all should report 0 violations)
 python tools/run_case_audit.py          # case age windows and T8/T9 gate preconditions
@@ -328,7 +328,7 @@ moonshadow/
 ├── tools/               21 executables = 15 release-verification commands + 1 Phase 2 probe + 3 GPU benchmark/diagnostic tools + 1 plugin bridge CLI + 1 stress gate
 │                        (run_llm_probe.py needs a local LLM key and is not part of release verification; moon_cli.py is the JSON-in/JSON-out bridge for the DSH plugin and is not part of it either)
 ├── eval/                case sets: gold 25 + rank 26 + holdout 9 (frozen) + network 48 + frozen manifest
-├── tests/               17 test files / 285 assertions
+├── tests/               17 test files / 288 assertions
 ├── examples/demo.py     end-to-end demo
 └── experiments/         the user's own hand computations (kept verbatim, must not be modified; see the notes in the files)
 ```
@@ -383,7 +383,7 @@ src/moonshadow/
   network_eval.py       network assignment evaluation: confusion matrix + strict/attainable dual readings
   network_rules.py      class-level vocabulary rules for the four network types (independent of tier)
   drift.py              measurement of reversal regions under parameter drift (empirical evidence that the additive scheme has no ratio bound)
-tests/                  acceptance tests for Phase 1 / 2 / 2.5 / 3 (17 test files; `Ran 285 tests` + `OK`, whatever the command prints is authoritative)
+tests/                  acceptance tests for Phase 1 / 2 / 2.5 / 3 (17 test files; `Ran 288 tests` + `OK`, whatever the command prints is authoritative)
 experiments/            the user's own hand computations (kept verbatim, must not be modified; see the notes in the files)
 examples/demo.py        end-to-end demo
 ```

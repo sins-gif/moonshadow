@@ -18,6 +18,7 @@ from audit_docs import (  # noqa: E402
     DOCS,
     HISTORICAL_MARKERS,
     INDEX,
+    PENDING,
     ROOT_DOCS,
     SPEC,
     check,
@@ -29,6 +30,7 @@ from audit_docs import (  # noqa: E402
     check_inline_doc_paths,
     check_links,
     check_parameter_table,
+    check_pending,
     check_values,
     check_withdrawn,
     is_historical,
@@ -55,6 +57,7 @@ class DocGuardTest(unittest.TestCase):
             check_authority,
             check_index_completeness,
             check_withdrawn,
+            check_pending,
         ):
             with self.subTest(rule=rule.__name__):
                 self.assertEqual(rule(), [])
@@ -310,6 +313,40 @@ class VersionAndWithdrawalTest(unittest.TestCase):
         for path in sorted(WITHDRAWN.glob("*.md")) if WITHDRAWN.exists() else []:
             with self.subTest(path=path.name):
                 self.assertIn(path.name, index, f"{path.name} 没有登记进 docs/README.md 的清单")
+
+
+class PendingLedgerTest(unittest.TestCase):
+    """待解锁台账：每条必须能被「判定」，否则它只是许愿。"""
+
+    def test_pending_entries_exist_and_are_indexed(self) -> None:
+        self.assertTrue(PENDING.exists(), "待解锁台账目录 docs/pending/ 必须存在")
+        index = INDEX.read_text(encoding="utf-8")
+        entries = sorted(PENDING.glob("P*.md"))
+        self.assertTrue(entries, "台账里至少要有一条")
+        for path in entries:
+            with self.subTest(path=path.name):
+                self.assertIn(path.name, index, f"{path.name} 没有登记进 docs/README.md 的清单")
+
+    def test_every_entry_has_a_decidable_unlock_condition(self) -> None:
+        """四要素齐全，并且「可实现性」里要有一条命令或一个阈值——不然没法判。"""
+        for path in sorted(PENDING.glob("P*.md")):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.name):
+                for field in ("目标版本", "想法", "可实现性", "当前状态"):
+                    self.assertIn(field, text, f"{path.name} 缺字段「{field}」")
+                # 解锁判定必须可执行：出现反引号里的命令，或一个数值阈值
+                self.assertTrue(
+                    "python " in text or "tools/" in text or "%" in text or "≤" in text,
+                    f"{path.name} 的「可实现性」没有给出可执行/可比的判定",
+                )
+
+    def test_pending_and_backlog_do_not_duplicate(self) -> None:
+        """台账与想法池不许互相复制内容：backlog 只指向 pending，不重述。"""
+        pending_names = {path.stem.split("-")[0] for path in PENDING.glob("P*.md")}
+        backlog = (DOCS / "backlog.md").read_text(encoding="utf-8")
+        for name in pending_names:
+            # 允许 backlog 用「见 pending/PN」的方式引用，但不许展开同名标题
+            self.assertNotIn(f"## {name} ", backlog, f"backlog 里不该再展开 {name}")
 
 
 if __name__ == "__main__":
