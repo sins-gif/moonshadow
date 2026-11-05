@@ -52,6 +52,7 @@
 | **准备动 v1.2.x Roadmap 的接口** | [`v1.2-future-llm-extractor.md`](v1.2-future-llm-extractor.md) | **实验性探索**：契约 C1–C8.3、Phase 1 收口、Phase 2 判据与首份全量读数；不描述已实现的系统 |
 | **有个重要但今天不该做的想法** | [`backlog.md`](backlog.md) | **想法池**：记下想法与它的前置条件；不构成承诺 |
 | **想知道哪一版改了什么、哪条宣称被撤回** | [`CHANGELOG.md`](CHANGELOG.md) | **版本时间线**：每版一句话 + 撤回指针；不定义协议 |
+| **想知道一次召回要多久、能撑到多少卡** | [`v1.2-perf-model.md`](v1.2-perf-model.md) | **运行时成本模型**：三模型拟合、边际（一阶导）、外推边界；不管协议 |
 | **想知道「压缩」这个说法为什么不算了** | [`withdrawn/W1-compression.md`](withdrawn/W1-compression.md) | **撤回记录**：撤回于哪版、原因（可复算）、重启条件 |
 | 查某个数字是怎么算出来的 | 工具输出 | 数值准绳是工具，不是散文（见 §3） |
 | **想知道当初是怎么想的** | [`v1.1-*`](v1.1-weights.md)、[`v1.0-moonshadow.md`](v1.0-moonshadow.md) | **历史版本 · 思考过程记录**；数据不作为依据 |
@@ -107,6 +108,7 @@
 | `v1.2-summary.md` | 现行 | 交接总览（含已失效结论清单） |
 | `v1.2-weights.md` | 现行 | 技术报告：定理、证明、实验与证据分级 |
 | `v1.2-candidates.md` | 现行 | 提案逐条评估 |
+| `v1.2-perf-model.md` | 现行 | **运行时成本模型**：召回耗时的三模型拟合、一阶导（边际）、外推边界；只管性能，不管协议 |
 | `v1.2-roadmap.md` | 现行 | 储备方案、分组 `f` 求解程序、批次验收规则 |
 | `v1.2-future-llm-extractor.md` | **实验性探索** | v1.2.x Roadmap 契约 C1–C8.3、Phase 1 收口、Phase 2 判据与首份全量读数 |
 | `v1.2-future-llm-extractor-freeze.md` | **实验性探索** | v1.2.x Roadmap 封存报告与 Backlog：交接摘要与重启信号（不引入新结论） |

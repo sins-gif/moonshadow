@@ -22,6 +22,7 @@ from stress_recall import (  # noqa: E402
     BUDGET_MS_PER_1K,
     FLOOR_MS,
     IQR_RATIO_LIMIT,
+    VERIFIED_UP_TO,
     limit_ms,
     marginal_rate,
     summarize,
@@ -116,6 +117,39 @@ class VerdictTest(unittest.TestCase):
     def test_limit_floor_is_the_constant(self) -> None:
         self.assertEqual(verdict(row(1000, [100.0] * 5))["limit_ms"], round(limit_ms(1000), 1))
         self.assertEqual(IQR_RATIO_LIMIT, 0.25)
+
+    def test_beyond_verified_range_is_reported_but_not_judged(self) -> None:
+        """超过已验证范围时，速度门降级为警告：门限本身是把曲线延长出来的。
+
+        这条防的是「用外推值给人判红」——外部证据只有 10–20000 卡，
+        再往上三种同样拟合良好的函数形式分歧 35%（见 docs/v1.2-perf-model.md §7）。
+        """
+        slow = [VERIFIED_UP_TO * 2 * 0.5] * 5          # 50000 卡、每卡 0.5 ms → 25000 ms，远超门限
+        measured = summarize(slow)
+        measured.update(
+            {
+                "cards": VERIFIED_UP_TO * 2,
+                "tokens_used": 100,
+                "budget_tokens": 4000,
+                "over_budget": False,
+                "reserved_share": 0.1,
+                "deterministic": True,
+            }
+        )
+        relaxed = verdict(measured)
+        self.assertTrue(relaxed["extrapolated"])
+        self.assertNotIn("G2a_speed", relaxed["hard"])
+        self.assertIn("G2a_speed_extrapolated", relaxed["soft"])
+        self.assertFalse(relaxed["soft"]["G2a_speed_extrapolated"])   # 仍然照实报「超了」
+        self.assertTrue(relaxed["passed"], "外推区间不该判红")
+
+        strict = verdict(measured, strict_extrapolated=True)
+        self.assertIn("G2a_speed", strict["hard"])
+        self.assertFalse(strict["passed"], "显式要求按外推硬判时才红")
+
+    def test_within_verified_range_is_judged_normally(self) -> None:
+        self.assertFalse(verdict(row(20000, [100.0] * 5))["extrapolated"])
+        self.assertIn("G2a_speed", verdict(row(20000, [100.0] * 5))["hard"])
 
 
 class MarginalTest(unittest.TestCase):

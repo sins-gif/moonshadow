@@ -21,6 +21,9 @@
 | 1500 | 333.4 | 222 | **483** |
 | 2000 | 517.7 | 259 | 369 |
 | 3000 | 754.2 | 251 | 237 |
+| 5000 | 1307.4 | 261 | 277 |
+| 10000 | 2682.5 | 268 | 275 |
+| **20000** | **6068.1** | **303** | **339** |
 
 `10 → 1000` 这一段是线性的：相邻边际稳定在 `79–91 ms/千卡`。用两点差分求截距：
 
@@ -41,7 +44,7 @@ a = T(10) − b·10 = 5.0 − 0.877 ≈ 4.1 ms
 | 常数 | 取值 | 出处 |
 |---|---|---|
 | `A`（固定开销） | `15 ms` | 实测截距 `4.1 ms` × `3.7`，向上取整。**倍数 `3.7` 是假设**：本机没测过 CI 容器/沙箱的解释器与 IO 额外开销；验证方法：在 CI 上跑一次 `--cards 10,100`，看截距是否仍 ≈ `4 ms` |
-| `B`（边际成本） | `300 ms/千卡` | 大区实测边际 `236–280` 取整到 `300`（约 `1.07–1.27×`）。**它是回归护栏，不是目标值**；目标值（10k ≤ 1 s，即 `100 ms/千卡`）记在 `docs/backlog.md` |
+| `B`（边际成本） | `300 ms/千卡` | 在 `1500–20000` 区间上仿射拟合得到的**等效斜率 `306`**，取整到 `300`。**它不是物理边际**：同一批数据幂律拟合给 `k = 1.0588`（边际 `295`）、二次拟合给 `301→372`。形状证据与残差表见 `docs/v1.2-perf-model.md` §4–§5 |
 
 **余量必须远小于最想抓的故障**：`15 ms` 对 `1000→1500` 那个 `240 ms` 的台阶只占 `6%`，
 所以它不会掩盖真问题——这一条可判定，不是「留点余量」的托词。
@@ -93,6 +96,29 @@ a = T(10) − b·10 = 5.0 − 0.877 ≈ 4.1 ms
 > **只有当 B 的 `max` < A 的 `min` 时，才能说「B 比 A 快」。**
 
 区间一重叠就不能宣称变快——那是把噪声当结论。这是「不许 hedging」的量化版本。
+
+### 6. 模型的有效范围（超过就必须标「外推」）
+
+`A + B·n` 只在**有实测的区间**里成立：本工具的数据覆盖 `10 – 20000` 卡。
+超过 `20000`，把那两个常数继续往右延长**不是结论**，理由是可量的：
+
+| 模型 | `T(50000)`（外推，无实测） |
+|---|---|
+| 仿射 `A+B·n` | 15,149 ms |
+| 幂律 `c·n^1.0588` | 15,330 ms |
+| 二次 `a+b·n+c·n²` | **20,433 ms** |
+
+三种拟合在 `1500–20000` 上 `R² ≥ 0.9967`（看着都很好），外推 2.5 倍规模却差 **35%**。
+所以：**拟合好 ≠ 能外推**。
+
+由此定了 `--verified-up-to`（默认 `20000`）：
+`cards > 该值` 时速度门**降级为警告**并标 `[外推]`——门限本身没有实测支撑，
+不能拿它判红；要按外推硬判，加 `--strict-extrapolated`。
+
+还有一条方法论上的教训要记在这里：**`R²` 高不等于模型对**。
+仿射模型在 `1500–20000` 上 `R² = 0.9969`，但截距是 `−165 ms`（物理上不可能），
+1500 卡处逐点误差 **23.1%**。判定标准必须是**逐点残差**，不是 `R²`。
+详细的残差表、导数表与两段截距（`+4.1` / `−165`）见 `docs/v1.2-perf-model.md`。
 
 其他判据
 --------
@@ -158,6 +184,14 @@ DEFAULT_QUERY = "GPU 加速的三档数字 和 预算 截止 交付"
 FLOOR_MS = 15.0             # A：固定开销上限（实测截距 4.1 ms × 3.7，倍数为假设）
 BUDGET_MS_PER_1K = 300.0    # B：边际成本上限（实测 236–280 ms/千卡，取整 300）
 IQR_RATIO_LIMIT = 0.25      # G5：IQR/中位上限（实测 4.2–7.5%，取 25% 留约 3 倍余量）
+
+#: 模型**有数据支撑**的上界（卡数）。超过它，`A + B·n` 只是把曲线延长，不是结论。
+#:
+#: 为什么是 20000：实测覆盖到 20000，且那一档已经**超 SLO**（6068 > 6015）。
+#: 再往上没有实测；而三种同样"拟合得很好"的函数形式（仿射 / 幂律 k=1.0588 / 二次）
+#: 外推到 50000 时分 别给出 15149 / 15330 / 20433 ms——**分歧 35%**，
+#: 所以外推值只能报，不能判。详见 `docs/v1.2-perf-model.md` §7。
+VERIFIED_UP_TO = 20000
 
 
 def tier_for(index: int, mix: str) -> str:
@@ -287,20 +321,34 @@ def measure(root: pathlib.Path, query: str, budget_tokens: int, repeats: int, wa
 
 
 def verdict(row: dict, *, floor_ms: float = FLOOR_MS, per_1k: float = BUDGET_MS_PER_1K,
-            reserved_limit: float = 0.30, iqr_limit: float = IQR_RATIO_LIMIT) -> dict:
-    """三硬三软。硬门全过才 `passed`；软门只影响 `warnings`。"""
+            reserved_limit: float = 0.30, iqr_limit: float = IQR_RATIO_LIMIT,
+            verified_up_to: int = VERIFIED_UP_TO, strict_extrapolated: bool = False) -> dict:
+    """三硬三软。硬门全过才 `passed`；软门只影响 `warnings`。
+
+    `cards > verified_up_to` 时，速度门**降级为警告**并标 `[外推]`：
+    门限本身是把曲线延长出来的，没有实测支撑，不能拿它当结论判红。
+    想按外推值硬判，传 `strict_extrapolated=True`。
+    """
     cap = limit_ms(row["cards"], floor_ms, per_1k)
+    speed_ok = row["median_ms"] <= cap
+    extrapolated = row["cards"] > verified_up_to
+
     hard = {
         "G1_deterministic": bool(row["deterministic"]),
-        "G2a_speed": row["median_ms"] <= cap,
         "G3_no_silent_overrun": (row["tokens_used"] <= row["budget_tokens"]) or bool(row["over_budget"]),
     }
     soft = {
         "G4_reserved_share": row["reserved_share"] <= reserved_limit,
         "G5_stability": row["iqr_ratio"] <= iqr_limit,
     }
+    if extrapolated and not strict_extrapolated:
+        soft["G2a_speed_extrapolated"] = speed_ok
+    else:
+        hard["G2a_speed"] = speed_ok
+
     return {
         "limit_ms": round(cap, 1),
+        "extrapolated": extrapolated,
         "hard": hard,
         "soft": soft,
         "warnings": [name for name, ok in soft.items() if not ok],
@@ -330,6 +378,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reserved-limit", type=float, default=0.30, help="常驻区占比警告线（默认 0.30）")
     parser.add_argument("--iqr-limit", type=float, default=IQR_RATIO_LIMIT,
                         help=f"稳定性警告线 IQR/中位（默认 {IQR_RATIO_LIMIT}）")
+    parser.add_argument("--verified-up-to", type=int, default=VERIFIED_UP_TO,
+                        help=f"模型有数据支撑的卡数上界（默认 {VERIFIED_UP_TO}）；超过即标「外推」")
+    parser.add_argument("--strict-extrapolated", action="store_true",
+                        help="外推区间也按硬门判（默认只报警，因为门限本身没有实测支撑）")
     parser.add_argument("--strict-marginal", action="store_true", help="把边际台阶警告升级成硬门")
     parser.add_argument("--strict-stability", action="store_true", help="把稳定性警告升级成硬门")
     parser.add_argument("--seed", type=int, default=20261105, help="合成库随机种子")
@@ -353,7 +405,9 @@ def main(argv: list[str] | None = None) -> int:
         row = measure(root, args.query, args.budget_tokens, args.repeats, args.warmup)
         row["mix"] = args.mix
         row.update(verdict(row, floor_ms=args.floor_ms, per_1k=args.budget_ms_per_1k,
-                          reserved_limit=args.reserved_limit, iqr_limit=args.iqr_limit))
+                          reserved_limit=args.reserved_limit, iqr_limit=args.iqr_limit,
+                          verified_up_to=args.verified_up_to,
+                          strict_extrapolated=args.strict_extrapolated))
         rows.append(row)
         if not args.keep:
             shutil.rmtree(root, ignore_errors=True)
@@ -384,28 +438,34 @@ def main(argv: list[str] | None = None) -> int:
         print()
         header = (
             f"  {'卡数':>6}{'n':>3}{'min':>8}{'中位':>8}{'max':>8}{'max/min':>9}{'IQR/中位':>9}"
-            f"{'门限':>8}{'装进':>6}{'tok':>8}{'常驻':>8}{'边际':>7}{'状态':>7}"
+            f"{'门限':>8}{'装进':>6}{'tok':>8}{'常驻':>8}{'边际':>7}{'状态':>11}"
         )
         print(header)
         print("  " + "-" * (len(header) - 2))
         for row in rows:
             marginal = row.get("marginal_ms_per_1k")
             state = "PASS" if row["passed"] else "FAIL"
+            if row.get("extrapolated"):
+                state = f"{state}·外推"
             print(
                 f"  {row['cards']:>6}{row['n']:>3}{row['min_ms']:>8.1f}{row['median_ms']:>8.1f}"
                 f"{row['max_ms']:>8.1f}{row['max_ratio']:>9.2f}{row['iqr_ratio']:>8.1%}"
                 f"{row['limit_ms']:>8.0f}{row['packed']:>6}{row['tokens_used']:>8}"
                 f"{row['reserved_share']:>8.0%}"
-                f"{('—' if marginal is None else f'{marginal:.0f}'):>7}{state:>7}"
+                f"{('—' if marginal is None else f'{marginal:.0f}'):>7}{state:>11}"
             )
         print()
         for row in rows:
             hard = row["hard"]
             flags = [
                 f"G1 确定性 {'✓' if hard['G1_deterministic'] else '✗'}",
-                f"G2a 速度 {'✓' if hard['G2a_speed'] else '✗'}",
-                f"G3 无静默超预算 {'✓' if hard['G3_no_silent_overrun'] else '✗'}",
             ]
+            if "G2a_speed" in hard:
+                flags.append(f"G2a 速度 {'✓' if hard['G2a_speed'] else '✗'}")
+            else:
+                ok = row["soft"].get("G2a_speed_extrapolated", True)
+                flags.append(f"G2a 速度 {'✓' if ok else '✗'}（外推，不作判据）")
+            flags.append(f"G3 无静默超预算 {'✓' if hard['G3_no_silent_overrun'] else '✗'}")
             if "G2b_marginal" in row:
                 flags.append(f"G2b 边际 {'✓' if row['G2b_marginal'] else '✗ 台阶'}")
             flags.append(f"G5 稳定 {'✓' if row['soft']['G5_stability'] else '⚠ 抖动'}（max/min {row['max_ratio']:.2f}）")
