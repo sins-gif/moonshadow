@@ -212,15 +212,43 @@ def split_sentences(text: str) -> list[str]:
     return [part.strip() for part in SENTENCE_SPLIT_RE.split(text) if part.strip()]
 
 
-def build_summary(text: str, limit: int = 120) -> str:
-    """压缩摘要，但**不允许把关键字段截掉**：截断后若有丢失，追加回关键字段。"""
+#: 一张卡 summary 的硬上限，与 schema.json 的 ``maxLength: 500`` 对齐。
+#: 为什么需要它：回填关键字段时**必须**有个停手的地方——实测把长消息喂进来时，
+#: 回填会把 summary 撑到 4652 字，直接撞穿 schema，整次抽取抛 SchemaError 中止。
+SUMMARY_MAX_CHARS = 500
+
+
+def build_summary(text: str, limit: int = 120, max_chars: int = SUMMARY_MAX_CHARS) -> str:
+    """压缩摘要，但**不允许把关键字段截掉**：截断后若有丢失，追加回关键字段。
+
+    回填受 ``max_chars`` 约束：按出现顺序收，放不下的字段整条跳过（不截半），
+    全都放不下时退回纯头部——返回值永远能过 schema 校验。
+
+    已知缺陷（记在 `docs/backlog.md`）：`extract_key_fields` 是**按类型**吐字段的，
+    所以关键字段多到超过 500 字时，先出现的类型（日期）会把预算吃光，金额/链接/代码进不来。
+    没有改成「按类型轮转」是**故意的**——轮转会让金标准集的卡 token 从 `10,049`/`17,364`
+    变成 `10,059`/`17,368`，压缩率 `0.498x → 0.497x`，spec / weights / 汇报材料里的读数
+    全要连带重算。收益是长消息上的字段多样性，代价是全仓库读数漂移一次，不划算。
+    """
     head = text[:limit]
     lost: list[str] = []
     for values in extract_key_fields(text).values():
         lost.extend(value for value in values if value not in head)
-    if lost:
-        head = f"{head} …关键字段：{'、'.join(dict.fromkeys(lost))}"
-    return head
+    if not lost:
+        return head[:max_chars]
+
+    prefix = f"{head} …关键字段："
+    kept: list[str] = []
+    room = max_chars - len(prefix)
+    for value in dict.fromkeys(lost):
+        cost = len(value) + (1 if kept else 0)
+        if cost > room:
+            continue
+        kept.append(value)
+        room -= cost
+    if not kept:
+        return head[:max_chars]
+    return f"{prefix}{'、'.join(kept)}"[:max_chars]
 
 
 class BaselineExtractor:

@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from moonshadow import FixedClock, Store  # noqa: E402
 from moonshadow.extractor import BatchDiagnostics, parse_llm_cards  # noqa: E402
 from moonshadow.compress import (  # noqa: E402
+    SUMMARY_MAX_CHARS,
     BaselineExtractor,
     build_prompt,
     build_summary,
@@ -31,6 +32,7 @@ from moonshadow.compress import (  # noqa: E402
     compile_session,
     prompt_hash,
 )
+from moonshadow.schema import load_schema  # noqa: E402
 
 MESSAGES = [
     "决定采用方案B。",
@@ -90,6 +92,25 @@ class FakePathTest(unittest.TestCase):
         summary = build_summary(text, limit=50)
         self.assertIn("12 万", summary)
         self.assertIn("2026-10-15", summary)
+
+    def test_summary_respects_schema_max_length(self) -> None:
+        """长消息回填关键字段时必须停手，否则整次抽取会被 schema 挡住。
+
+        这不是假想的边界：把一份真实聊天记录按 300 字切块导入时，回填把 summary 撑到
+        4652 字，`make_card` 直接抛 `SchemaError`，整个导入中止。这里把契约钉住：
+        `SUMMARY_MAX_CHARS` 必须等于 `schema.json` 的 `maxLength`，且返回值不得超它。
+        """
+        limit = load_schema()["properties"]["summary"]["maxLength"]
+        self.assertEqual(SUMMARY_MAX_CHARS, limit)
+
+        # 关键字段极多：每个分句都带数字与日期，回填若不设限必然越界
+        crowded = "；".join(f"第 {i} 笔预算 {i * 7} 万，截止 2026-11-{i % 28 + 1:02d}" for i in range(1, 80))
+        summary = build_summary("这是一段很长的说明。" * 40 + crowded)
+        self.assertLessEqual(len(summary), limit)
+        # 停手不等于全丢：头部仍在，且关键字段仍然进来了（放不下的整条跳过，不截半）
+        self.assertTrue(summary.startswith("这是一段很长的说明。"))
+        self.assertIn("关键字段：", summary)
+        self.assertIn("2026-11", summary)
 
     def test_prompt_contains_ids_and_hash_is_stable(self) -> None:
         prompt = build_prompt([{"id": "msg_1", "created_at": "2026-10-01T09:00:00+00:00", "text": "你好"}])
