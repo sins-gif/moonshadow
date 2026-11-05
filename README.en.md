@@ -7,8 +7,8 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 | | |
 |---|---|
 | **Repository** | <https://github.com/sins-gif/moonshadow> |
-| **Version** | `v1.2.0` ([code at this version](https://github.com/sins-gif/moonshadow/tree/v1.2.0) ｜ `git tag v1.2.0`) |
-| **Minimal rerun** | `python -m unittest discover -s tests` → `Ran 246 tests` + `OK` |
+| **Version** | `v1.2.2` (current) ｜ frozen baseline [`v1.2.0`](https://github.com/sins-gif/moonshadow/tree/v1.2.0); version timeline and **withdrawn claims** in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) |
+| **Minimal rerun** | `python -m unittest discover -s tests` → `Ran 285 tests` + `OK` |
 
 > **This version is the data-driven parameter-convergence release**: `f = 0.5925`, `θ = θ′ = 0.3941`, default scheme multiplicative;
 > `T9` is covered on the negative side only (the gap is on record). Sealed-release reading: **all 14 commands exit `0`** — for `run_eval.py` that means the measurements and the gate both pass,
@@ -30,32 +30,42 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 - **Bounded multiplicative correction** (`q = r · m`, `m ∈ [f, 1]`) avoids the **threshold-inseparability** defect of additive fusion:
   on the same case set, additive reverses `117` pairs inside the region where multiplicative is **guaranteed** not to, while multiplicative goes out of bounds `0` times;
   additive's ranking agreement **also ties at full marks** (`1.000` vs `1.000`) — **a defect that ranking metrics cannot see, exposed by threshold calibration and the drift experiment**.
-- **246 unit assertions + 15 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
+- **285 unit assertions + 15 audit/verification commands**: parameters and data are strictly controlled — each case's age window and gate preconditions,
   whether negatives are really blocked by the gate, whether the holdout set has been modified, whether the assignment forms in the docs match the code — **all executable and re-runnable**.
 
 ### Architecture at a glance
 
 ```mermaid
 flowchart TB
-    REQ["AI Agent: send a long request"]
+    REQ["DSH conversation: captured every turn"]
+    subgraph PLUGIN["dsh-moonshadow plugin (runs locally, not in git)"]
+        CAP["session/event → auto capture"]
+        INJ["systemPrompt.context → auto inject"]
+    end
     subgraph STORAGE["Cold storage (implemented)"]
-        STORE["store.py: SQLite source of truth"]
-        CHUNKS["chunks.py: framed compression + sha256"]
+        STORE["store.py: append raw text<br/>raw/&lt;day&gt;.jsonl + source table"]
+        CHUNKS["chunks.py: frames + sha256<br/>implemented · not wired in production"]
     end
     subgraph EXTRACT["Extraction (implemented)"]
-        COMPRESS["compress.py: rule fast path + extraction pipeline"]
+        COMPRESS["compress.py: rule fast path + extraction pipeline<br/>summary ≠ compression: measured 0.498x (W1 withdrawn)"]
         TIERS["tiers.py: T0–T9 and half-lives"]
         CARDS["cards.py: enforced against schema.json"]
     end
     subgraph RECALL["Retrieval (implemented: orchestrated by recall.py)"]
-        GATE1["Qualitative gate: age window + T8/T9 carrier ban"]
+        GATE1["Qualitative gate: age window + T8/T9 ban"]
         SCORE["scoring.py: q = r · m (bounded multiplicative)"]
         GATE2["Quantitative gate: q ≥ θ"]
-        PACK["pack.py: token-budget packing"]
+        PACK["pack.py: token-budget packing<br/>reserved zone T0/T1 ignores quota (known risk)"]
     end
-    CTX["clean context handed to the LLM"]
+    CTX["clean context handed to the LLM<br/>auto-injected ≤800 tok per turn"]
+    subgraph LOOP["Tier loop (implemented, not wired in production)"]
+        STEP["next_step: ternary -1 / 0 / +1"]
+        LAND["stepped_tier: landing, out-of-range raises"]
+        BOUND["ALLOWED_STEPS: allowed step per tier"]
+    end
 
-    REQ -->|"write raw text"| STORE
+    REQ --> CAP
+    CAP -->|"write raw text"| STORE
     STORE --- CHUNKS
     STORE -->|"verbatim extraction"| COMPRESS
     COMPRESS --> TIERS
@@ -65,10 +75,16 @@ flowchart TB
     SCORE --> GATE2
     GATE2 --> PACK
     PACK -->|"fit into the budget"| CTX
+    CTX -->|"auto inject"| INJ
+    INJ -.->|"next turn"| REQ
     PACK -.->|"back-link by source_id when verbatim detail is needed"| STORE
+    CTX -.->|"context used → note_access (not wired)"| STEP
+    STEP --> LAND
+    LAND --> BOUND
+    BOUND -.->|"tier change → affects the next retrieval"| GATE1
 ```
 
-Three things to read off the diagram (these are conventions, not implementation trivia):
+Four things to read off the diagram (these are conventions, not implementation trivia):
 
 1. **The retrieval chain is the definition in `v1.2-spec.md` §5** (gate → score → pack). The gate has two stages:
    the qualitative one (age window, `T8/T9` carrier ban) runs **before** scoring, the quantitative one (`q ≥ θ`) runs **after**
@@ -79,6 +95,22 @@ Three things to read off the diagram (these are conventions, not implementation 
    `recall()` has no side effects; diagnostics are printed only with `verbose=True`.
 3. **`verify.py` is not on the retrieval chain**: it is called by `eval.run_case` to judge whether a card silently lost hard fields;
    packing does not go through it. Drawing "loss judgement" into the packing arrow would suggest packing blocks field loss, which is false.
+4. **Three boxes are "implemented but not wired in production" — do not read them as running**: frame archiving in `chunks.py`
+   (only `examples/demo.py` and the tests call `archive_day`; the live store has **0 files** under `chunks/`), the `next_tier`
+   loop (**zero production callers**), and `note_access` accounting (**only called from the demo**).
+   One claim is **withdrawn**: the extraction layer produces a **summary**, not a compression — measured `0.498x`
+   (cards larger than the source), see [`docs/withdrawn/W1-compression.md`](docs/withdrawn/W1-compression.md).
+
+### Two ways to use it, with different capability
+
+- **In-process gates and scoring only**: they are **pure functions**, callable as
+  `from moonshadow.scoring import passes_gate`. Measured in an empty directory: **zero files changed in the cwd**
+  (no store created, nothing read). Caveat: `import moonshadow` still loads the `sqlite3` module (it creates no file and
+  opens no database); removing that entirely needs lazy imports in the package.
+  (`GATE_ONLY` is **not an existing mode** — no such identifier exists in the code; it only describes this pure-function usage.)
+- **Full runtime** (auto capture → retrieval → injection): **partial**. Four pieces are missing: `note_access` accounting,
+  the `next_tier` loop, `chunks` archiving, and a reserved-zone cap on the injection budget. All four are tracked in
+  [`docs/CHANGELOG.md`](docs/CHANGELOG.md) and [`docs/backlog.md`](docs/backlog.md).
 
 Clock injection (`SystemClock` / `FixedClock`) is described in `v1.2-spec.md` §5.4; the three non-negotiable constraints are in the last section of this file.
 
@@ -101,7 +133,7 @@ Clock injection (`SystemClock` / `FixedClock`) is described in `v1.2-spec.md` §
 No dependencies to install (Python 3.10+, standard library only):
 
 ```bash
-python -m unittest discover -s tests   # deterministic tests: count and status are whatever this command prints (measured for this delivery: Ran 246 tests + OK)
+python -m unittest discover -s tests   # deterministic tests: count and status are whatever this command prints (measured for this delivery: Ran 285 tests + OK)
 
 # Audits and contracts (four of them; all should report 0 violations)
 python tools/run_case_audit.py          # case age windows and T8/T9 gate preconditions
@@ -285,17 +317,18 @@ and the adopted value became `θ′ = θ = 0.3941`. Later parameter decisions ne
 moonshadow/
 ├── README.md            front page: features, status, known defects, quick start, author's note
 ├── README.en.md         English version of this file
+├── HANDOFF.md           handoff document: start a new conversation with "read HANDOFF.md" to get the current state and every number (introduces no new conclusions)
 ├── LICENSE              MIT
 ├── .gitignore           ignores __pycache__ / .env / credentials / large files and archives / runtime artifacts
 ├── .gitattributes       `* -text`: disables newline conversion (otherwise the frozen holdout hashes all break after checkout)
 ├── schema.json          memory-card JSON Schema (enforced validation, additionalProperties=false)
 ├── ddl.sql              SQLite DDL: card / claim / source / card_source / cursor / entity*
 ├── docs/                13 files: 4 current + 2 v1.2.x Roadmap drafts + 1 authoritative + index + idea backlog + 4 historical (see below)
-├── src/moonshadow/      19 files / 18 modules (standard library only; includes the stub extractor and the recall orchestrator)
-├── tools/               16 executables = 15 release-verification commands + 1 Phase 2 probe
-│                        (run_llm_probe.py needs a local LLM key; it is not part of release verification)
+├── src/moonshadow/      20 files / 19 modules (standard library only; includes the stub extractor, the recall orchestrator and an optional GPU backend)
+├── tools/               21 executables = 15 release-verification commands + 1 Phase 2 probe + 3 GPU benchmark/diagnostic tools + 1 plugin bridge CLI + 1 stress gate
+│                        (run_llm_probe.py needs a local LLM key and is not part of release verification; moon_cli.py is the JSON-in/JSON-out bridge for the DSH plugin and is not part of it either)
 ├── eval/                case sets: gold 25 + rank 26 + holdout 9 (frozen) + network 48 + frozen manifest
-├── tests/               15 test files / 246 assertions
+├── tests/               17 test files / 285 assertions
 ├── examples/demo.py     end-to-end demo
 └── experiments/         the user's own hand computations (kept verbatim, must not be modified; see the notes in the files)
 ```
@@ -350,7 +383,7 @@ src/moonshadow/
   network_eval.py       network assignment evaluation: confusion matrix + strict/attainable dual readings
   network_rules.py      class-level vocabulary rules for the four network types (independent of tier)
   drift.py              measurement of reversal regions under parameter drift (empirical evidence that the additive scheme has no ratio bound)
-tests/                  acceptance tests for Phase 1 / 2 / 2.5 / 3 (14 test files; `Ran 246 tests` + `OK`, whatever the command prints is authoritative)
+tests/                  acceptance tests for Phase 1 / 2 / 2.5 / 3 (17 test files; `Ran 285 tests` + `OK`, whatever the command prints is authoritative)
 experiments/            the user's own hand computations (kept verbatim, must not be modified; see the notes in the files)
 examples/demo.py        end-to-end demo
 ```

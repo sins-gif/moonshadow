@@ -30,8 +30,11 @@ from audit_docs import (  # noqa: E402
     check_links,
     check_parameter_table,
     check_values,
+    check_withdrawn,
     is_historical,
+    is_withdrawn,
     markdown_files,
+    WITHDRAWN,
 )
 
 
@@ -40,7 +43,7 @@ class DocGuardTest(unittest.TestCase):
         self.assertEqual(check(), [])
 
     def test_each_rule_is_reported_separately(self) -> None:
-        """八条规则各自独立可跑——否则一条挂了会掩盖其他几条。"""
+        """九条规则各自独立可跑——否则一条挂了会掩盖其他几条。"""
         for rule in (
             check_links,
             check_inline_doc_paths,
@@ -51,6 +54,7 @@ class DocGuardTest(unittest.TestCase):
             check_parameter_table,
             check_authority,
             check_index_completeness,
+            check_withdrawn,
         ):
             with self.subTest(rule=rule.__name__):
                 self.assertEqual(rule(), [])
@@ -246,6 +250,66 @@ class WorktreeHygieneTest(unittest.TestCase):
         for path in sorted((ROOT / "eval" / "holdout").glob("*.json")):
             with self.subTest(case=path.name):
                 self.assertNotIn(b"\r\n", path.read_bytes())
+
+
+class VersionAndWithdrawalTest(unittest.TestCase):
+    """版本号与撤回记录必须互相对得上。
+
+    为什么需要这一组：`__version__` 曾经落后 tag 一个版本（tag 到 `v1.2.1` 时，
+    `__version__` 还是 `1.2.0`），而**没有任何检查会发现**——README、CHANGELOG、
+    tag 三处各说各话。撤回记录同理：写「撤回于 v9.9.9」也能骗过肉眼。
+    """
+
+    def _current_version(self) -> str:
+        import moonshadow  # noqa: PLC0415 - 只为拿 __version__，避免顶层导入顺序问题
+
+        return moonshadow.__version__
+
+    def test_version_is_synced_across_code_readme_and_changelog(self) -> None:
+        version = self._current_version()
+        self.assertRegex(version, r"^\d+\.\d+\.\d+$")
+        for name in ("README.md", "README.en.md"):
+            text = (ROOT / name).read_text(encoding="utf-8")
+            self.assertIn(f"`v{version}`", text, f"{name} 的版本行没有跟到 v{version}")
+        changelog = (DOCS / "CHANGELOG.md").read_text(encoding="utf-8")
+        self.assertIn(f"v{version}", changelog, f"CHANGELOG 里没有 v{version} 这一行")
+        self.assertIn(f"**v{version}**", changelog, f"CHANGELOG 里 v{version} 这一行没有被标成当前版本")
+
+    def test_withdrawn_versions_point_at_a_real_release(self) -> None:
+        """「撤回于 vX.Y.Z」必须是真实版本：已打 tag 的 tag 存在，当前版本由 `__version__` 兜底。
+
+        为什么允许「当前版本未打 tag」：撤回记录总是先于打 tag 写下来，
+        如果强行要求 tag 已存在，这条守卫只能在发版之后才通过——那时已经晚了。
+        """
+        import re
+        import subprocess
+
+        version = self._current_version()
+        tags = set(
+            subprocess.run(
+                ["git", "-C", str(ROOT), "tag", "-l"],
+                capture_output=True, text=True, check=False,
+            ).stdout.split()
+        )
+        checked = 0
+        for path in sorted(WITHDRAWN.glob("*.md")) if WITHDRAWN.exists() else []:
+            if not is_withdrawn(path):
+                continue
+            text = path.read_text(encoding="utf-8")
+            for claimed in re.findall(r"撤回于\s*`?(v\d+\.\d+\.\d+)`?", text):
+                checked += 1
+                self.assertTrue(
+                    claimed in tags or claimed == f"v{version}",
+                    f"{path.name} 声称「撤回于 {claimed}」，但既没有这个 tag，也不是当前版本 v{version}",
+                )
+        self.assertGreater(checked, 0, "撤回记录目录存在，却一条「撤回于 vX.Y.Z」都没找到")
+
+    def test_every_withdrawn_record_is_indexed(self) -> None:
+        """撤回记录必须进 docs 索引——否则它等于没写。"""
+        index = INDEX.read_text(encoding="utf-8")
+        for path in sorted(WITHDRAWN.glob("*.md")) if WITHDRAWN.exists() else []:
+            with self.subTest(path=path.name):
+                self.assertIn(path.name, index, f"{path.name} 没有登记进 docs/README.md 的清单")
 
 
 if __name__ == "__main__":

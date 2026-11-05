@@ -53,10 +53,19 @@ CURRENT_PREFIX = "v1.2"
 #: 错误怎么被发现的），但其中数据**不作为依据**，故豁免数值检查并强制状态横幅。
 HISTORICAL_PREFIXES = ("v1.0", "v1.1")
 
-#: **不随版本走的活文档**（索引、想法池）。它们不是某个版本的快照，而是持续维护的入口，
+#: **不随版本走的活文档**（索引、想法池、版本时间线）。它们不是某个版本的快照，而是持续维护的入口，
 #: 因此按「现行」对待：必须声明与 spec 的关系，且受数值检查约束。
 #: 新增此类文档必须显式登记在这里——否则会被 `check_classification` 拦下。
-LIVING = ("README.md", "backlog.md")
+LIVING = ("README.md", "backlog.md", "CHANGELOG.md")
+
+#: **撤回记录目录**：一条被撤回的对外宣称一个文件（`W<n>-<slug>.md`）。
+#: 它们不是「现行协议文档」，也不是「历史快照」——它们记录的是**某条宣称在某版本被撤回**，
+#: 所以既不参与现行赋值式检查（那里的数字是「不成立」的证据），也不进 `HISTORICAL_PREFIXES`
+#: （它们不是被取代，是被撤回）。只受链接与三要素检查。
+WITHDRAWN = DOCS / "withdrawn"
+
+#: 每个撤回转件必须同时出现的三样东西。缺一样就等于「撤回了，但没人知道是哪版、为什么、何时能重来」。
+WITHDRAWN_FIELDS = ("撤回于", "原因", "重启条件")
 
 #: **实验性探索文档**（`v1.2.x Roadmap`）。它们属于 v1.2 生态，但状态**不是**「现行」：
 #: 描述的是尚未兑现的东西（LLM 抽取器、跨批信息项注册表）。所以既不按现行查
@@ -148,6 +157,11 @@ def is_experimental(path: pathlib.Path) -> bool:
     return path in EXPERIMENTAL
 
 
+def is_withdrawn(path: pathlib.Path) -> bool:
+    """撤回记录（`docs/withdrawn/` 下的非索引文件）。"""
+    return path.parent == WITHDRAWN and path.name != "README.md"
+
+
 def check_links() -> list[str]:
     violations: list[str] = []
     for path in markdown_files():
@@ -192,6 +206,7 @@ def check_classification() -> list[str]:
             or is_historical(path)
             or is_living(path)
             or is_experimental(path)
+            or path.parent == WITHDRAWN          # 撤回记录（含它自己的索引）
         ):
             continue
         violations.append(
@@ -323,6 +338,35 @@ def check_index_completeness() -> list[str]:
     ]
 
 
+def check_withdrawn() -> list[str]:
+    """撤回记录必须能回答三件事：撤回于哪个版本、为什么、什么条件下能重来。
+
+    为什么要有这条守卫：撤回是**主动作废自己说过的话**，它最大的失败模式不是写错，
+    而是写得含糊——「这条不算了」但没说在哪个版本、为什么、怎么才算数。
+    含糊的撤回比不撤回更糟：读者不知道该信哪一版。
+    """
+    violations: list[str] = []
+    version_pattern = re.compile(r"撤回于\s*`?(v\d+\.\d+\.\d+)`?")
+    if not WITHDRAWN.exists():
+        return violations                              # 没有撤回记录目录时无需检查
+    for path in sorted(WITHDRAWN.glob("*.md")):
+        if not is_withdrawn(path):
+            continue
+        text = path.read_text(encoding="utf-8")
+        for field in WITHDRAWN_FIELDS:
+            if field not in text:
+                violations.append(
+                    f"{path.relative_to(ROOT)}：撤回记录缺「{field}」——"
+                    "每条撤回都必须写明：撤回于哪个版本、原因（可复算）、重启条件（可判定）"
+                )
+        if not version_pattern.search(text):
+            violations.append(
+                f"{path.relative_to(ROOT)}：找不到形如「撤回于 v1.2.2」的版本标记；"
+                "撤回必须绑定到具体版本，否则无法回答「哪一版开始不算了」"
+            )
+    return violations
+
+
 def inventory() -> list[tuple[str, str, int, int]]:
     rows = []
     for path in sorted(DOCS.rglob("*.md")):
@@ -336,6 +380,8 @@ def inventory() -> list[tuple[str, str, int, int]]:
             status = "活文档"
         elif is_experimental(path):
             status = "实验性"
+        elif is_withdrawn(path):
+            status = "撤回记录"
         else:
             status = "现行"
         text = path.read_text(encoding="utf-8")
@@ -361,6 +407,7 @@ def check() -> list[str]:
         + check_parameter_table()
         + check_authority()
         + check_index_completeness()
+        + check_withdrawn()
     )
 
 

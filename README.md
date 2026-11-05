@@ -7,8 +7,8 @@
 | | |
 |---|---|
 | **仓库** | <https://github.com/sins-gif/moonshadow> |
-| **版本** | `v1.2.0`（[该版本的代码](https://github.com/sins-gif/moonshadow/tree/v1.2.0) ｜ `git tag v1.2.0`） |
-| **最小复跑** | `python -m unittest discover -s tests` → `Ran 246 tests` + `OK` |
+| **版本** | `v1.2.2`（当前）｜ 冻结基线 [`v1.2.0`](https://github.com/sins-gif/moonshadow/tree/v1.2.0)；版本时间线与**已撤回的宣称**见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) |
+| **最小复跑** | `python -m unittest discover -s tests` → `Ran 285 tests` + `OK` |
 
 > **本版是数据驱动的参数收敛版**：`f = 0.5925`、`θ = θ′ = 0.3941`、默认方案乘性；
 > `T9` 走负例覆盖（该缺口记录在案）。封版读数：**14 条命令全部退出码 `0`**——其中 `run_eval.py` 的读法是：度量与过门均通过，
@@ -30,32 +30,42 @@
 - **采用有界乘性修正算法**（`q = r · m`，`m ∈ [f, 1]`），规避加性融合的**阈值不可分离**缺陷：
   同一批用例上，加性方案在合成网格里于乘性方案**有保证**的区域仍反转 `117` 组，乘性越界 `0` 组；
   其排序一致率**也并列满分**（`1.000` vs `1.000`）——**排序指标看不出的缺陷，由阈值与漂移实验暴露**。
-- **246 项单元测试 + 15 条审计/验证命令**：参数与数据严格受控——用例的卡龄窗口与门前置、
+- **285 项单元测试 + 15 条审计/验证命令**：参数与数据严格受控——用例的卡龄窗口与门前置、
   负例是否真被门挡住、留出集是否被改动、文档里的赋值式是否与代码一致，**全部可执行、可复跑**。
 
 ### 架构一览
 
 ```mermaid
 flowchart TB
-    REQ["AI Agent：发起长文本请求"]
+    REQ["DSH 对话：每轮自动采集"]
+    subgraph PLUGIN["dsh-moonshadow 插件（本地运行，不进 git）"]
+        CAP["session/event → 自动采集"]
+        INJ["systemPrompt.context → 自动注入"]
+    end
     subgraph STORAGE["冷存层（已实现）"]
-        STORE["store.py：SQLite 真相源"]
-        CHUNKS["chunks.py：分帧压缩 + sha256"]
+        STORE["store.py：原文追加<br/>raw/&lt;day&gt;.jsonl + source 表"]
+        CHUNKS["chunks.py：分帧 + sha256<br/>已实现 · 生产路径未接线"]
     end
     subgraph EXTRACT["抽取层（已实现）"]
-        COMPRESS["compress.py：规则快路径 + 抽取管道"]
+        COMPRESS["compress.py：规则快路径 + 抽取管道<br/>摘要 ≠ 压缩：实测 0.498x（W1 已撤回）"]
         TIERS["tiers.py：T0–T9 与半衰期"]
         CARDS["cards.py：按 schema.json 强制校验"]
     end
     subgraph RECALL["调度层（已实现：recall.py 编排）"]
-        GATE1["定性硬门：卡龄窗口 + T8/T9 载体禁令"]
+        GATE1["定性硬门：卡龄窗口 + T8/T9 禁令"]
         SCORE["scoring.py：q = r · m（有界乘性修正）"]
         GATE2["定量硬门：q ≥ θ"]
-        PACK["pack.py：Token 预算装箱"]
+        PACK["pack.py：Token 预算装箱<br/>常驻区 T0/T1 不受配额（已知风险）"]
     end
-    CTX["给 LLM 的纯净上下文"]
+    CTX["给 LLM 的纯净上下文<br/>自动注入 ≤800 tok/轮"]
+    subgraph LOOP["层级回环（已实现，生产未接线）"]
+        STEP["next_step：三值 -1 / 0 / +1"]
+        LAND["stepped_tier：落点，越界抛错"]
+        BOUND["ALLOWED_STEPS：每层允许的步进"]
+    end
 
-    REQ -->|"原文写入"| STORE
+    REQ --> CAP
+    CAP -->|"原文写入"| STORE
     STORE --- CHUNKS
     STORE -->|"逐字抽取"| COMPRESS
     COMPRESS --> TIERS
@@ -65,10 +75,16 @@ flowchart TB
     SCORE --> GATE2
     GATE2 --> PACK
     PACK -->|"装入预算"| CTX
+    CTX -->|"自动注入"| INJ
+    INJ -.->|"进入下一轮"| REQ
     PACK -.->|"需要逐字细节时按 source_id 回链"| STORE
+    CTX -.->|"上下文被使用 → 记账 note_access（待接）"| STEP
+    STEP --> LAND
+    LAND --> BOUND
+    BOUND -.->|"层级变化 → 影响下次召回"| GATE1
 ```
 
-读图注意三点（都是口径，不是实现细节）：
+读图注意四点（都是口径，不是实现细节）：
 
 1. **调度层那条链路是 `v1.2-spec.md` §5 的定义**（硬门 → 打分 → 装箱）。其中「硬门」分两段：
    定性段（卡龄窗口、`T8/T9` 载体禁令）在打分**前**，定量段（`q ≥ θ`）在打分**后**——
@@ -79,6 +95,20 @@ flowchart TB
    `recall()` 零副作用，`verbose=True` 才打印每步砍掉多少张卡。
 3. **`verify.py` 不在召回链路上**：它由 `eval.run_case` 调用，判定卡是否静默丢了硬字段；
    装箱不经过它。把「损失判定」画进装箱箭头会让人以为装箱会拦丢字段，那是错的。
+4. **图上有三处「已实现但生产没接线」，别当成在跑**：`chunks.py` 的分帧归档（只有 `examples/demo.py`
+   与测试调 `archive_day`，真实库 `chunks/` 是 **0 个文件**）、`next_tier` 的层级回环（**生产调用方 0**）、
+   `note_access` 的记账（**只在 demo 里调过**）。另有一条**已撤回的宣称**：抽取层产出的是**摘要**，
+   不是压缩——实测 `0.498x`（卡比原文大），见 [`docs/withdrawn/W1-compression.md`](docs/withdrawn/W1-compression.md)。
+
+### 两种用法，能力不同（别混着说）
+
+- **in-process 只用门与打分**：它们是**纯函数**，可以直接 `from moonshadow.scoring import passes_gate` 调用。
+  实测在空目录里调用它，**cwd 前后零文件变化**（不建库、不读文件）。
+  注意：`import moonshadow` 仍会加载 `sqlite3` 模块（只是不建文件、不连库）；要彻底不碰得把包的导入改成惰性。
+  （`GATE_ONLY` **不是现有模式**——代码里没有这个标识，它只是描述这种纯函数用法。）
+- **完整 runtime**（自动采集 → 召回 → 注入）：**partial**。缺四件：`note_access` 记账、`next_tier` 回环、
+  `chunks` 归档、注入预算的常驻区上限。这四条都在 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) 与
+  [`docs/backlog.md`](docs/backlog.md) 里有对应条目。
 
 时间注入（`SystemClock` / `FixedClock`）见 `v1.2-spec.md` §5.4；三条不可退让的约束见本文末节。
 
@@ -101,7 +131,7 @@ flowchart TB
 无需安装任何依赖（Python 3.10+，纯标准库）：
 
 ```bash
-python -m unittest discover -s tests   # 确定性测试：条数与状态以本命令输出为准（本次交付实测 Ran 246 tests + OK）
+python -m unittest discover -s tests   # 确定性测试：条数与状态以本命令输出为准（本次交付实测 Ran 285 tests + OK）
 
 # 审计与契约（四条，均应为 0 违规）
 python tools/run_case_audit.py          # 用例的卡龄窗口与 T8/T9 门前置
@@ -286,16 +316,17 @@ python examples/demo.py                 # 端到端演示，打印每一步的�
 moonshadow/
 ├── README.md            门面：特点、现状、已知缺陷、快速开始、作者说明
 ├── README.en.md         English version of the same document（英文版，内容一一对应）
+├── HANDOFF.md           交接文档：新开对话第一句「读 HANDOFF.md」即拿到现状与全部数字（不引入新结论）
 ├── LICENSE              MIT
 ├── .gitignore           忽略 __pycache__ / .env / 凭据 / 大文件与归档 / 运行产物
 ├── .gitattributes       `* -text`：禁止换行转换（否则留出集冻结哈希会在 checkout 后全部失效）
 ├── schema.json          记忆卡 JSON Schema（强制校验，additionalProperties=false）
 ├── ddl.sql              SQLite 建表：card / claim / source / card_source / cursor / entity*
 ├── docs/                13 份：现行 4 + v1.2.x Roadmap 2 + 权威 1 + 索引 + 想法池 + 历史版本 4（见下）
-├── src/moonshadow/      19 个文件 / 18 个模块（纯标准库，含 STUB 抽取器与召回编排器）
-├── tools/               16 个可执行命令 = **15 条发布验证命令 + 1 条 Phase 2 临时探针**（`run_llm_probe.py` 需本地 LLM key，无 key 时退出 2，**不参与发布验证**）（审计 + 评测 + 重划 + 守卫 + 探针）
+├── src/moonshadow/      20 个文件 / 19 个模块（纯标准库，含 STUB 抽取器、召回编排器与可选 GPU 后端）
+├── tools/               21 个可执行命令 = **15 条发布验证命令 + 1 条 Phase 2 临时探针 + 3 条 GPU 基准/诊断 + 1 条插件桥接 CLI + 1 条压力测试门**（`run_llm_probe.py` 需本地 LLM key，无 key 时退出 2，**不参与发布验证**；`moon_cli.py` 是 JSON 进 / JSON 出的 DSH 插件桥，同样不参与发布验证）（审计 + 评测 + 重划 + 守卫 + 探针）
 ├── eval/                用例集：gold 25 + rank 26 + holdout 9（冻结）+ network 48 + 冻结清单
-├── tests/               15 个测试文件 / 246 项断言
+├── tests/               17 个测试文件 / 285 项断言
 ├── examples/demo.py     端到端演示
 └── experiments/         用户自算记录（原样保存，不得修改；见文件内说明）
 ```
@@ -350,7 +381,7 @@ src/moonshadow/
   network_eval.py       network 赋值评测：混淆矩阵 + 严格/可达双口径
   network_rules.py      四类网络的类级词汇规则（不依赖 tier）
   drift.py              参数漂移下的反转区域测量（加性方案无比值上界的实证）
-tests/                  Phase 1 / 2 / 2.5 / 3 的验收测试（14 个测试文件；`Ran 246 tests` + `OK`，以命令输出为准）
+tests/                  Phase 1 / 2 / 2.5 / 3 的验收测试（17 个测试文件；`Ran 285 tests` + `OK`，以命令输出为准）
 experiments/            用户自算记录（原样保存，不得修改；见文件内说明）
 examples/demo.py        端到端演示
 ```
