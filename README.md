@@ -8,7 +8,7 @@
 |---|---|
 | **仓库** | <https://github.com/sins-gif/moonshadow> |
 | **版本** | `v1.2.2`（当前）｜ 冻结基线 [`v1.2.0`](https://github.com/sins-gif/moonshadow/tree/v1.2.0)；版本时间线与**已撤回的宣称**见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) |
-| **最小复跑** | `python -m unittest discover -s tests` → `Ran 270 tests` + `OK` |
+| **最小复跑** | `python -m unittest discover -s tests` → `Ran 283 tests` + `OK` |
 
 > **本版是数据驱动的参数收敛版**：`f = 0.5925`、`θ = θ′ = 0.3941`、默认方案乘性；
 > `T9` 走负例覆盖（该缺口记录在案）。封版读数：**14 条命令全部退出码 `0`**——其中 `run_eval.py` 的读法是：度量与过门均通过，
@@ -30,7 +30,7 @@
 - **采用有界乘性修正算法**（`q = r · m`，`m ∈ [f, 1]`），规避加性融合的**阈值不可分离**缺陷：
   同一批用例上，加性方案在合成网格里于乘性方案**有保证**的区域仍反转 `117` 组，乘性越界 `0` 组；
   其排序一致率**也并列满分**（`1.000` vs `1.000`）——**排序指标看不出的缺陷，由阈值与漂移实验暴露**。
-- **270 项单元测试 + 15 条审计/验证命令**：参数与数据严格受控——用例的卡龄窗口与门前置、
+- **283 项单元测试 + 15 条审计/验证命令**：参数与数据严格受控——用例的卡龄窗口与门前置、
   负例是否真被门挡住、留出集是否被改动、文档里的赋值式是否与代码一致，**全部可执行、可复跑**。
 
 ### 架构一览
@@ -131,7 +131,7 @@ flowchart TB
 无需安装任何依赖（Python 3.10+，纯标准库）：
 
 ```bash
-python -m unittest discover -s tests   # 确定性测试：条数与状态以本命令输出为准（本次交付实测 Ran 270 tests + OK）
+python -m unittest discover -s tests   # 确定性测试：条数与状态以本命令输出为准（本次交付实测 Ran 283 tests + OK）
 
 # 审计与契约（四条，均应为 0 违规）
 python tools/run_case_audit.py          # 用例的卡龄窗口与 T8/T9 门前置
@@ -324,9 +324,9 @@ moonshadow/
 ├── ddl.sql              SQLite 建表：card / claim / source / card_source / cursor / entity*
 ├── docs/                13 份：现行 4 + v1.2.x Roadmap 2 + 权威 1 + 索引 + 想法池 + 历史版本 4（见下）
 ├── src/moonshadow/      20 个文件 / 19 个模块（纯标准库，含 STUB 抽取器、召回编排器与可选 GPU 后端）
-├── tools/               20 个可执行命令 = **15 条发布验证命令 + 1 条 Phase 2 临时探针 + 3 条 GPU 基准/诊断 + 1 条插件桥接 CLI**（`run_llm_probe.py` 需本地 LLM key，无 key 时退出 2，**不参与发布验证**；`moon_cli.py` 是 JSON 进 / JSON 出的 DSH 插件桥，同样不参与发布验证）（审计 + 评测 + 重划 + 守卫 + 探针）
+├── tools/               21 个可执行命令 = **15 条发布验证命令 + 1 条 Phase 2 临时探针 + 3 条 GPU 基准/诊断 + 1 条插件桥接 CLI + 1 条压力测试门**（`run_llm_probe.py` 需本地 LLM key，无 key 时退出 2，**不参与发布验证**；`moon_cli.py` 是 JSON 进 / JSON 出的 DSH 插件桥，同样不参与发布验证）（审计 + 评测 + 重划 + 守卫 + 探针）
 ├── eval/                用例集：gold 25 + rank 26 + holdout 9（冻结）+ network 48 + 冻结清单
-├── tests/               16 个测试文件 / 270 项断言
+├── tests/               17 个测试文件 / 283 项断言
 ├── examples/demo.py     端到端演示
 └── experiments/         用户自算记录（原样保存，不得修改；见文件内说明）
 ```
@@ -381,7 +381,7 @@ src/moonshadow/
   network_eval.py       network 赋值评测：混淆矩阵 + 严格/可达双口径
   network_rules.py      四类网络的类级词汇规则（不依赖 tier）
   drift.py              参数漂移下的反转区域测量（加性方案无比值上界的实证）
-tests/                  Phase 1 / 2 / 2.5 / 3 的验收测试（16 个测试文件；`Ran 270 tests` + `OK`，以命令输出为准）
+tests/                  Phase 1 / 2 / 2.5 / 3 的验收测试（17 个测试文件；`Ran 283 tests` + `OK`，以命令输出为准）
 experiments/            用户自算记录（原样保存，不得修改；见文件内说明）
 examples/demo.py        端到端演示
 ```
