@@ -9,6 +9,7 @@
 | **仓库** | <https://github.com/sins-gif/moonshadow> |
 | **版本** | `v1.2.2`（当前）｜ 冻结基线 [`v1.2.0`](https://github.com/sins-gif/moonshadow/tree/v1.2.0)；版本时间线与**已撤回的宣称**见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) |
 | **最小复跑** | `python -m unittest discover -s tests` → `Ran 288 tests` + `OK` |
+| **说明书** | 想知道怎么用、记住什么、边界在哪：读 [`docs/MANUAL.md`](docs/MANUAL.md)；想先看它能记住什么：`python examples/mvp_memory.py` |
 
 > **本版是数据驱动的参数收敛版**：`f = 0.5925`、`θ = θ′ = 0.3941`、默认方案乘性；
 > `T9` 走负例覆盖（该缺口记录在案）。封版读数：**14 条命令全部退出码 `0`**——其中 `run_eval.py` 的读法是：度量与过门均通过，

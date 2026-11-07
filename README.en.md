@@ -9,6 +9,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 | **Repository** | <https://github.com/sins-gif/moonshadow> |
 | **Version** | `v1.2.2` (current) ｜ frozen baseline [`v1.2.0`](https://github.com/sins-gif/moonshadow/tree/v1.2.0); version timeline and **withdrawn claims** in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) |
 | **Minimal rerun** | `python -m unittest discover -s tests` → `Ran 288 tests` + `OK` |
+| **Manual** | How to use it, what it remembers, where the limits are: [`docs/MANUAL.md`](docs/MANUAL.md) (Chinese); to see what it can recall first: `python examples/mvp_memory.py` |
 
 > **This version is the data-driven parameter-convergence release**: `f = 0.5925`, `θ = θ′ = 0.3941`, default scheme multiplicative;
 > `T9` is covered on the negative side only (the gap is on record). Sealed-release reading: **all 14 commands exit `0`** — for `run_eval.py` that means the measurements and the gate both pass,

@@ -56,7 +56,7 @@ HISTORICAL_PREFIXES = ("v1.0", "v1.1")
 #: **不随版本走的活文档**（索引、想法池、版本时间线）。它们不是某个版本的快照，而是持续维护的入口，
 #: 因此按「现行」对待：必须声明与 spec 的关系，且受数值检查约束。
 #: 新增此类文档必须显式登记在这里——否则会被 `check_classification` 拦下。
-LIVING = ("README.md", "backlog.md", "CHANGELOG.md")
+LIVING = ("README.md", "backlog.md", "CHANGELOG.md", "MANUAL.md")
 
 #: **撤回记录目录**：一条被撤回的对外宣称一个文件（`W<n>-<slug>.md`）。
 #: 它们不是「现行协议文档」，也不是「历史快照」——它们记录的是**某条宣称在某版本被撤回**，
