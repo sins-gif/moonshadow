@@ -7,7 +7,7 @@
 | | |
 |---|---|
 | **仓库** | <https://github.com/sins-gif/moonshadow> |
-| **版本** | `v1.2.2`（当前）｜ 冻结基线 [`v1.2.0`](https://github.com/sins-gif/moonshadow/tree/v1.2.0)；版本时间线与**已撤回的宣称**见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) |
+| **版本** | `v1.2.3`（当前）｜ 冻结基线 [`v1.2.0`](https://github.com/sins-gif/moonshadow/tree/v1.2.0)；版本时间线与**已撤回的宣称**见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) |
 | **最小复跑** | `python -m unittest discover -s tests` → `Ran 270 tests` + `OK` |
 
 > **本版是数据驱动的参数收敛版**：`f = 0.5925`、`θ = θ′ = 0.3941`、默认方案乘性；
