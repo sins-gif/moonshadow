@@ -7,7 +7,7 @@ A local-first, traceable time-layered memory system for agents. **Raw text store
 | | |
 |---|---|
 | **Repository** | <https://github.com/sins-gif/moonshadow> |
-| **Version** | `v1.2.2` (current) ｜ frozen baseline [`v1.2.0`](https://github.com/sins-gif/moonshadow/tree/v1.2.0); version timeline and **withdrawn claims** in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) |
+| **Version** | `v1.2.3` (current) ｜ frozen baseline [`v1.2.0`](https://github.com/sins-gif/moonshadow/tree/v1.2.0); version timeline and **withdrawn claims** in [`docs/CHANGELOG.md`](docs/CHANGELOG.md) |
 | **Minimal rerun** | `python -m unittest discover -s tests` → `Ran 288 tests` + `OK` |
 | **Manual** | How to use it, what it remembers, where the limits are: [`docs/MANUAL.md`](docs/MANUAL.md) (Chinese); to see what it can recall first: `python examples/mvp_memory.py` |
 
